@@ -1,0 +1,13 @@
+block: meteo
+date: '[dateend]'
+datebegin: '2005080106'
+dateend: '2006080106'
+experiment: reanalysis2020.2@lafaysse
+filename: FORCING.nc
+geometry: alp_allslopes
+kind: MeteorologicalForcing
+model: safran
+namebuild: flat@cen
+namespace: vortex.multi.fr
+vapp: s2m
+vconf: '[geometry:tag]'

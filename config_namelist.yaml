@@ -1,0 +1,37 @@
+block: pro
+date: '[dateend]'
+datebegin:
+- '2021080206'
+- '2022022612'
+dateend:
+  datebegin:
+    '2021080206': '2022022612'
+    '2022022612': '2022080106'
+experiment: TEST_assim
+geometry: GrandesRousses250m
+kind: SnowpackSimulation
+local: mb[member]/PRO.nc
+member:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+- 10
+- 11
+- 12
+- 13
+- 14
+- 15
+- 16
+model: surfex
+namebuild: flat@cen
+namespace: vortex.multi.fr
+username: imperatoren
+vapp: edelweiss
+vconf: '[geometry:tag]'
