@@ -9,7 +9,7 @@ dateend:
 experiment: TEST_assim_xstepoutput_24h
 geometry: GrandesRousses250m
 kind: SnowpackSimulation
-local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb[member]/pro/PRO_[datebegin:ymdh]_[datebegin:ymdh].nc
+local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb0[member]/pro/PRO_[datebegin:ymdh]_[datebegin:ymdh].nc
 member:
 - 0
 - 1

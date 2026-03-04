@@ -35,6 +35,22 @@ config = dict(
     namespace="vortex.multi.fr",
 )
 
-with open("config_prep_analysis.yaml", "w") as file:
+config = dict(
+    filename="/home/imperatoren/work/edelweiss_assimilation/data/snow_cover/viirs_composite/soda/MF_FSC_VJ1_L3_20220226.nc",
+    date="2022022612",  # '2018012312', '2018031612', '2022022612', '2022050112'
+    vapp="viirs",
+    vconf="[geometry:tag]",
+    experiment="assim_viirs",
+    geometry="GrandesRousses250m",
+    kind="SnowObservations",
+    model="surfex",
+    block="",
+    scope="viirs",
+    namespace="vortex.multi.fr",
+    namebuild="flat@cen",
+    fatal=True,
+)
+
+with open("config_obs_put.yaml", "w") as file:
     # Charger le contenu du fichier en tant que dictionnaire Python
     yaml.dump(config, file)

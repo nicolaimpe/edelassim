@@ -1,0 +1,13 @@
+block: ''
+date: '2022022612'
+experiment: assim_viirs
+fatal: true
+filename: /home/imperatoren/work/edelweiss_assimilation/data/snow_cover/viirs_composite/soda/MF_FSC_VJ1_L3_20220226.nc
+geometry: GrandesRousses250m
+kind: SnowObservations
+model: surfex
+namebuild: flat@cen
+namespace: vortex.multi.fr
+scope: viirs
+vapp: viirs
+vconf: '[geometry:tag]'

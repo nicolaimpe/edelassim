@@ -6,7 +6,7 @@ from vortex import toolbox
 toolbox.active_now = True
 
 
-with open("config_pro.yaml", "r") as file:
+with open("config_obs_put.yaml", "r") as file:
     # Charger le contenu du fichier en tant que dictionnaire Python
     config = yaml.safe_load(file)
 if config["kind"] in ("MeteorologicalForcing"):
@@ -34,7 +34,7 @@ if config["kind"] in ("MeteorologicalForcing"):
 #     )
 
 print("Footprints", config)
-tb = toolbox.input(**config)
+tb = toolbox.output(**config)
 
 # tb.quickview()
 # tb.check()
