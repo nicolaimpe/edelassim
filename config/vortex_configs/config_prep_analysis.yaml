@@ -1,9 +1,9 @@
 block: prep/analysis
 date: '2022022612'
-experiment: TEST_assim
+experiment: TEST_assim_viirs
 geometry: GrandesRousses250m
 kind: PREP
-local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb[member]/prep/analysis/PREP_[date:ymdh].nc
+local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb0[member]/prep/analysis/PREP_[date:ymdh].nc
 member:
 - 0
 - 1

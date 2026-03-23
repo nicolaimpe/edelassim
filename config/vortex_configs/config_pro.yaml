@@ -6,7 +6,7 @@ dateend:
   datebegin:
     '2021080206': '2022022612'
     '2022022612': '2022080106'
-experiment: TEST_assim_xstepoutput_24h
+experiment: TEST_assim_viirs
 geometry: GrandesRousses250m
 kind: SnowpackSimulation
 local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb0[member]/pro/PRO_[datebegin:ymdh]_[datebegin:ymdh].nc

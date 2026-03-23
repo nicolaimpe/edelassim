@@ -70,3 +70,7 @@ class EdelweissGrandesRoussesGrid(GSGrid):
             crs=CRS.from_epsg(2154),
             name="Edelweiss_GrandesRousses",
         )
+
+
+def scale_virrs(image_sat: xr.DataArray) -> xr.DataArray:
+    return image_sat.where(image_sat <= 200) / 200

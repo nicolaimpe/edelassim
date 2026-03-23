@@ -1,0 +1,48 @@
+import glob
+
+import numpy as np
+import xarray as xr
+from geospatial_grid.georeferencing import georef_netcdf_rioxarray
+from pyproj import CRS
+
+
+def compute_snow_thickness_from_prep(prep_file: str, slope_file: str, crs: CRS, output_file: str | None = None) -> float:
+    # Merci Bastien
+    prep_ds = xr.open_dataset(prep_file)
+    slope_da = xr.open_dataarray(slope_file).sel(band=1)
+
+    thickness_layers = []
+    for i in range(1, 51):  # Boucle sur les 50 couches
+        wsn_var = f"WSN_VEG{i}"  # Masse en kg/m2
+        rsn_var = f"RSN_VEG{i}"  # Masse volumique en kg/m3
+
+        if wsn_var in prep_ds and rsn_var in prep_ds:
+            thickness_layers.extend(prep_ds[wsn_var].values / prep_ds[rsn_var].values)
+        else:
+            raise ValueError(f"Variables {wsn_var} ou {rsn_var} manquantes dans le fichier NetCDF")
+
+    total_thickness = np.nansum(thickness_layers, axis=0)
+    x_coords = np.unique(prep_ds.data_vars["XX"].values)
+    y_coords = np.unique(prep_ds.data_vars["XY"].values)
+    new_shape = (len(y_coords), len(x_coords))
+    total_thickness_da = xr.DataArray(
+        np.reshape(total_thickness, shape=new_shape), coords={"y": y_coords, "x": x_coords}, name="snow_depth"
+    )
+    total_thickness_da = total_thickness_da.reindex(y=total_thickness_da.coords["y"].sortby("y", ascending=False))
+    total_thickness_da = total_thickness_da / np.cos(
+        np.deg2rad(slope_da)
+    )  # projection sur la VERTICALE pour être coherent avec sortir des fichiers PRO
+    total_thickness_da = georef_netcdf_rioxarray(total_thickness_da, crs=crs)  # add georeferencing
+    if output_file is not None:
+        total_thickness_da.to_netcdf(output_file)
+    return total_thickness_da
+
+
+def compute_all_members_snow_tickness(simulation_folder: str, slope_file: str, type: str = "analysis"):
+    prep_an_files = sorted(glob.glob(f"{simulation_folder}/mb0*/prep/{type}/PREP*.nc"))
+    prep_an_data_list = [
+        compute_snow_thickness_from_prep(prep_file=prep_an_file, slope_file=slope_file, crs=CRS.from_epsg(2154))
+        for prep_an_file in prep_an_files
+    ]
+    prep_an = xr.concat(prep_an_data_list, dim="member").reindex(member=np.arange(0, len(prep_an_files))).rename("snow_depth")
+    return prep_an
