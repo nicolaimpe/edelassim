@@ -1,6 +1,6 @@
+# from edelassim.postprocess_surfex.pro import postprocess_pro
 # Preprocess simulation output (assimilation of snow depth in this case)
 import glob
-import os
 from datetime import timedelta
 
 import numpy as np
@@ -9,6 +9,11 @@ import xarray as xr
 from pandas import date_range
 from pyproj import CRS
 
+simulation_folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/grandesrousses250m/open_loop"
+output_folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/grandesrousses250m/open_loop/"
+filename = "all_members/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc.nc"
+output_file = f"{output_folder}/{filename}"
+
 
 def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> xr.Dataset:
 
@@ -16,7 +21,6 @@ def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> x
     member_simulations = []
     member_numbers = []
     for member_folder in member_folders:
-        print(f"open {os.path.basename(member_folder)}")
         member_all_period = xr.open_mfdataset(
             sorted(glob.glob(f"{member_folder}/pro/*.nc")), concat_dim="time", combine="nested"
         )
@@ -28,12 +32,13 @@ def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> x
     # date_range(all_edel.coords['time'][0])
 
     # all_edel_simplified = all_edel.sel(time=time_sampling)
-    print("concatenating all members")
     all_edel = xr.concat(member_simulations, dim=pd.Index(member_numbers, name="member"), coords="all")
     all_edel = all_edel.drop_vars("Projection_Type")
     all_edel = all_edel.rename({"xx": "x", "yy": "y"})
     all_edel = all_edel.rio.write_crs(CRS.from_epsg(2154)).rio.write_coordinate_system()
     if output_file is not None:
-        print(f"Exporting to {output_file}")
         all_edel.to_netcdf(output_file)
     return all_edel
+
+
+sd_analysis = postprocess_pro(simulation_folder=simulation_folder, output_file=output_file)

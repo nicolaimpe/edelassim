@@ -1,12 +1,7 @@
 block: pro
-datebegin:
-- '2021080206'
-- '2022022612'
-dateend:
-  datebegin:
-    '2021080206': '2022022612'
-    '2022022612': '2022080106'
-experiment: TEST_assim_viirs
+datebegin: '2021080206'
+dateend: '2022080106'
+experiment: open_loop
 geometry: GrandesRousses250m
 kind: SnowpackSimulation
 local: /home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/[geometry:tag]/[experiment]/mb0[member]/pro/PRO_[datebegin:ymdh]_[datebegin:ymdh].nc

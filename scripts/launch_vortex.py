@@ -5,17 +5,17 @@ from vortex import toolbox
 
 toolbox.active_now = True
 
-
-with open("config_prep_background.yaml", "r") as file:
+config_folder = "../config/vortex_configs"
+with open(f"{config_folder}/config_forcing_edelweiss.yaml", "r") as file:
     # Charger le contenu du fichier en tant que dictionnaire Python
     config = yaml.safe_load(file)
-if config["kind"] in ("MeteorologicalForcing"):
-    config.update(
-        local=config["local"].replace(
-            ".nc",
-            f"_{config['experiment']}_{config['geometry']}_{config['datebegin']}_{config['dateend']}.nc",
-        )
-    )
+# if config["kind"] in ("MeteorologicalForcing"):
+#     config.update(
+#         local=config["local"].replace(
+#             ".nc",
+#             f"_{config['experiment']}_{config['geometry']}_{config['datebegin']}_{config['dateend']}.nc",
+#         )
+#     )
 # elif config["kind"] in ("PREP"):
 #     config.update(
 #         local=config["local"].replace(

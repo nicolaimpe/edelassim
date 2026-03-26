@@ -1,0 +1,33 @@
+block: meteo
+date: '[dateend]'
+datebegin: '2021080106'
+dateend: '2022080106'
+experiment: ALPAGA@vernaym
+geometry: GrandesRousses250m
+kind: MeteorologicalForcing
+filename: /home/imperatoren/work/edelweiss_assimilation/data/forcings/[geometry:tag]/[experiment]/mb[member]/meteo/FORCING_[datebegin]_[dateend].nc
+member:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+- 10
+- 11
+- 12
+- 13
+- 14
+- 15
+- 16
+
+model: surfex
+namebuild: flat@cen
+namespace: vortex.multi.fr
+vapp: edelweiss
+vconf: '[geometry:tag]'
+
