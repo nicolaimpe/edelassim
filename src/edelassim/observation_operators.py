@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def zaitchik(swe: np.ndarray, tau_scf: float, swe_full_snow_cover: float) -> np.ndarray:
+def zaitchik(swe: np.ndarray, tau_scf: int = 4, swe_full_snow_cover: int = 20) -> np.ndarray:
     return np.minimum(1 - (np.exp(-tau_scf * (swe / swe_full_snow_cover)) - (swe / swe_full_snow_cover) * np.exp(-tau_scf)), 1)
 
 
