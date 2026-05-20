@@ -5,6 +5,13 @@ import xarray as xr
 from edelassim.observation_operators import zaitchik
 from edelassim.postprocess_surfex.prep import compute_all_members_snow_tickness_and_mass
 
+
+def klocalize(correlations_point_i: xr.DataArray, k_max: int):
+    sorted = correlations_point_i[0].sortby(lambda x: x, ascending=False)
+    out = sorted.sel(j=slice(1, k_max + 1))
+    return out
+
+
 slope_map = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/topography/slope.tif"
 prep_files = []
 folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/grandesrousses250m/assim_viirs_local"
@@ -79,5 +86,12 @@ all_member_sd_swe.data_vars["swe"].mean(dim="member").where(~cloud_mask.SCF).plo
 ax.plot(idx_corr.xi, idx_corr.yi, "r*")
 ax.plot(k_idx_corr.xj, k_idx_corr.yj, "yo")
 
+# sortby(lambda x: x, ascending=False)
+
+# return np.sort(correlations_point_i, axis=1)
+
+
+kmax = 20
+sorted_correlations = cov_matrix.dropna(dim="j", how="all").groupby("i").map(klocalize, (kmax,))
 # ax.plot()
 # print(k_idx_corr.xj.values,k_idx_corr.yj.values)
