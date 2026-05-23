@@ -30,7 +30,7 @@ class Ensemble:
         return self.members[0].n_points
 
     def as_array(self) -> np.ndarray:
-        return np.ndarray(self.members)
+        return np.array([member.values for member in self.members])
 
 
 @dataclass
