@@ -1,3 +1,4 @@
+import numpy as np
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
 from ndsi_fsc_calibration.snow_cover_products import S2_CLASSES
@@ -13,7 +14,7 @@ METEOFRANCE_CLASSES = {
 }
 
 
-def reduce_fsc_to_pixel_counts_meteofrance(fsc_and_aux_dataset: xr.Dataset) -> xr.Dataset:
+def reduce_fsc_to_pixel_counts(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
     """Produce a synthesis of a snow cover fraction. Intermediary data for snowline calculation.
 
     :param fsc_and_aux_dataset: a Dataset having a snow_cover_fraction layer and optionally other layers on the same \
@@ -23,50 +24,35 @@ def reduce_fsc_to_pixel_counts_meteofrance(fsc_and_aux_dataset: xr.Dataset) -> x
     :rtype: xr.Dataset
     """
     # there's a water class for lakes and rivers to consider
-    satellite_fsc_data = fsc_and_aux_dataset.data_vars["snow_cover_fraction"]
-    # Set water pixels to 0 snow cover
-    satellite_fsc_data = satellite_fsc_data.where(satellite_fsc_data != METEOFRANCE_CLASSES["water"], 0)
+
+    # snow cover threshold
+    snow_cover_fraction = fsc_and_auxiliary.data_vars["snow_cover_fraction"]
+    snow_cover_mask = snow_cover_fraction >= 0.5
+    return xr.Dataset(
+        {
+            "snow_cover_sum": snow_cover_fraction.sum(),
+            "land_sum": (1 - snow_cover_fraction).sum(),
+            "n_snow_cover_pixels": snow_cover_mask.sum(),
+            "total_valid": snow_cover_fraction.count(),
+        }
+    )
+
+
+def count_time_series_snow_pixels(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
+    return fsc_and_auxiliary.groupby("time").map(reduce_fsc_to_pixel_counts)
+
+
+def valid_snow_cover_fraction_viirs_mf(viirs_mf_data: xr.DataArray) -> xr.DataArray:
+    satellite_fsc_data = viirs_mf_data.where(viirs_mf_data != METEOFRANCE_CLASSES["water"], 0)
     valid_data_mask = satellite_fsc_data < METEOFRANCE_CLASSES["nodata"]
-    invalid_data_mask = satellite_fsc_data >= METEOFRANCE_CLASSES["nodata"]
     valid_snow_cover_fraction = satellite_fsc_data.where(valid_data_mask) / METEOFRANCE_CLASSES["snow_cover"][-1]
-    # snow cover threshold
-    snow_cover_mask = valid_snow_cover_fraction >= 0.5
-    return xr.Dataset(
-        {
-            "snow_cover_sum": valid_snow_cover_fraction.sum(),
-            "land_sum": (1 - valid_snow_cover_fraction).sum(),
-            "n_snow_cover_pixels": snow_cover_mask.sum(),
-            "total_valid": valid_data_mask.sum(),
-            "total_invalid": invalid_data_mask.sum(),
-        }
-    )
+    return valid_snow_cover_fraction
 
 
-def reduce_fsc_to_pixel_counts_s2(fsc_and_aux_dataset: xr.Dataset) -> xr.Dataset:
-    """Produce a synthesis of a snow cover fraction. Intermediary data for snowline calculation.
-
-    :param fsc_and_aux_dataset: a Dataset having a snow_cover_fraction layer and optionally other layers on the same \
-    coordinate system (aspect map, slope maps, etc...). It is produced by the MountainParametrization class
-    :type fsc_and_aux_dataset: xr.Dataset
-    :return: a Dataset contained synthetic information over snow and land cover
-    :rtype: xr.Dataset
-    """
-    # there's a water class for lakes and rivers to consider
-    satellite_fsc_data = fsc_and_aux_dataset.data_vars["snow_cover_fraction"]
-    valid_data_mask = satellite_fsc_data < S2_CLASSES["clouds"]
-    invalid_data_mask = satellite_fsc_data >= S2_CLASSES["clouds"]
-    valid_snow_cover_fraction = satellite_fsc_data.where(valid_data_mask)
-    # snow cover threshold
-    snow_cover_mask = valid_snow_cover_fraction >= 0.5
-    return xr.Dataset(
-        {
-            "snow_cover_sum": valid_snow_cover_fraction.sum(),
-            "land_sum": (1 - valid_snow_cover_fraction).sum(),
-            "n_snow_cover_pixels": snow_cover_mask.sum(),
-            "total_valid": valid_data_mask.sum(),
-            "total_invalid": invalid_data_mask.sum(),
-        }
-    )
+def valid_snow_cover_fraction_s2(sentinel2_fsc_data: xr.DataArray):
+    valid_data_mask = sentinel2_fsc_data < S2_CLASSES["clouds"]
+    valid_snow_cover_fraction = sentinel2_fsc_data.where(valid_data_mask) / S2_CLASSES["snow_cover"][-1]
+    return valid_snow_cover_fraction
 
 
 def sum_all_values_below(data_array: xr.DataArray, dim: str, coord: str) -> xr.DataArray:
@@ -176,14 +162,21 @@ class SnowCoverFractionToSnowline:
         """
         # Prepare data for reduction (spatially distributed -> semidistributed or categorically distributed)
         mountain_binner = MountainBinner(config=self.mnt_data_paths)
-        bins_dictionary = mountain_binner.create_default_bin_dict_from_config(altitude_step=100, altitude_max=3900)
+        dem = xr.open_dataarray(self.mnt_data_paths.dem_path)
+        alt_min = np.floor(dem.min() / 50) * 50
+        alt_max = np.ceil(dem.max() / 50) * 50
+        bins_dictionary = mountain_binner.create_user_bin_dict(
+            altitude_edges=np.arange(alt_min, alt_max + 50, 50),
+            slope_edges=np.array([0, 10, 30, 50]),
+        )
+
+        bins_dictionary.update(aspect=MountainBinner.regular_8_aspect_bins())
         reduced = mountain_binner.transform(
             distributed_data=self.snow_cover_fraction,
             bin_dict=bins_dictionary,
-            function=reduce_fsc_to_pixel_counts_s2,
+            function=count_time_series_snow_pixels,
         )
 
-        # Take only the slopes between 5 and 30 degrees : (bin 5 -> slopes between [5, 30) °])
         # Convert reduction to some metrics that can be directly used for snowline
         snowline_diagram = to_snowline_parametrization(reduced)
         # snowline_diagram = snowline_diagram.swap_dims({"altitude_min": "altitude_bins"})

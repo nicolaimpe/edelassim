@@ -52,7 +52,7 @@ def compute_snow_thickness_and_mass_from_prep(
     return out_dataset
 
 
-def compute_all_members_snow_tickness_and_mass(prep_files: List[str], slope_file: str):
+def compute_all_members_snow_tickness_and_mass(prep_files: List[str], slope_file: str) -> xr.Dataset:
 
     prep_an_data_list = [
         compute_snow_thickness_and_mass_from_prep(prep_file=prep_an_file, slope_file=slope_file, crs=CRS.from_epsg(2154))

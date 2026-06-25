@@ -1,13 +1,49 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from ipywidgets import Dropdown, interact
 from matplotlib.axes import Axes
+from matplotlib.colors import LinearSegmentedColormap
 from scipy.special import logit
 from scipy.stats import pearsonr
 
 from edelassim.evaluations import find_common_correspondences
 
+############ STATIC
 COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
+
+
+# Define color stops at specific values
+fsc_color_def_viirs_mf = [
+    (0.0, (0, 0, 0)),  # 0 -> black, no snow
+    (1 / 255, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
+    (200 / 255, (1, 1, 1)),  # 200 -> white, full snow
+    (219 / 255, (1, 1, 1)),  # 200 -> white, full snow
+    (220 / 255, (0, 0, 1)),  # 220 -> blue, water
+    (230 / 255, (0.5, 0.5, 0.5)),  # 230 -> gray, no data
+    (1.0, (0.5, 0.5, 0.5)),  # 255 -> gray
+]
+
+FSC_CMAP_VIIRS_MF = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_viirs_mf, N=256)
+
+fsc_color_def_s2 = [
+    (0.0, (0, 0, 0)),  # 0 -> black, no snow
+    (1 / 255, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
+    (100 / 255, (1, 1, 1)),  # 200 -> white, full snow
+    (204 / 255, (1, 1, 1)),  # 200 -> white, full snow
+    (205 / 255, (0.5, 0.5, 0.5)),  # 205 -> gray, clouds
+    (1.0, (0.5, 0.5, 0.5)),  # 255 -> gray, nodata
+]
+
+FSC_CMAP_S2 = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_s2, N=256)
+
+fsc_color_def_edel = [
+    (0.0, (0, 0, 0)),  # 0 -> black, no snow
+    (1 / 200, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
+    (200 / 200, (1, 1, 1)),  # 200 -> white, full snow
+]
+
+FSC_CMAP_EDEL = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_edel, N=256)
 
 
 def scatter_logit_plot(
@@ -63,17 +99,16 @@ def boxplot_logit_plot(
     ax_logit.legend()
 
 
-def plot_snowline_polarplot(snowline_parametrization_dataset: xr.Dataset, ax: Axes, label: str) -> None:
+def plot_snowline_polarplot(snowline_parametrization_dataset: xr.Dataset, ax: Axes, label: str, color: str) -> None:
 
     # print(snowline_parametrization_dataset)
     snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
 
     alt_index = snowline_parametrization_dataset.data_vars["snowline_penalization"].argmin("altitude_min")
-    snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"] + 50
-
+    snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"]
+    print(label, snowline.values)
     max_alt = snowline_parametrization_dataset.coords["altitude_max"].max()
     r = snowline
-    # print(max_alt - r)
     theta = [np.deg2rad(COMPASS_ROSE_DICT[asp]) for asp in snowline_parametrization_dataset.coords["aspect"].values]
 
     r = [*r, r[0]]
@@ -82,35 +117,8 @@ def plot_snowline_polarplot(snowline_parametrization_dataset: xr.Dataset, ax: Ax
     ax.set_rorigin(max_alt)
     ax.set_theta_direction(-1)  # Clockwise rotation (standard for maps)
     ax.set_theta_offset(np.pi / 2)
-    ax.plot(theta, r, label=label)
+    ax.plot(theta, r, label=label, color=color)
     ax.grid(True)
     ax.set_title("Snowline", va="bottom")
     ax.legend()
     return ax
-
-
-if __name__ == "__main__":
-    s2_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/granderousses/s2"
-    snowline_filepath = f"{s2_folder}/snowline_paremetrization.nc"
-    # print(xr.open_dataset(snowline_filepath).sel(slope="10 - 30").snowline_penalization.sel(aspect="N"))
-    fig, ax = plt.subplots(1, 1, figsize=(5, 8), subplot_kw={"projection": "polar"}, layout="constrained")
-    plot_snowline_polarplot(
-        snowline_parametrization_dataset=xr.open_dataset(snowline_filepath).sel(slope="10 - 30"), ax=ax, label="Sentinel-2"
-    )
-
-    edelweiss_folder = (
-        "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/grandesrousses250m/open_loop/all_members"
-    )
-    snowline_filepath = f"{edelweiss_folder}/snowline_paremetrization.nc"
-    plot_snowline_polarplot(
-        snowline_parametrization_dataset=xr.open_dataset(snowline_filepath).sel(slope="10 - 30"), ax=ax, label="EDELWEISS"
-    )
-
-    viirs_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/granderousses/meteofrance/"
-    snowline_filepath = f"{viirs_folder}/snowline_paremetrization.nc"
-    plot_snowline_polarplot(
-        snowline_parametrization_dataset=xr.open_dataset(snowline_filepath).sel(slope="10 - 30"), ax=ax, label="VIIRS"
-    )
-
-    plt.show()
-    # plt.show()
