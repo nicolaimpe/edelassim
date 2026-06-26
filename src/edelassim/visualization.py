@@ -4,10 +4,14 @@ import xarray as xr
 from ipywidgets import Dropdown, interact
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from ndsi_fsc_calibration.snow_cover_products import S2_CLASSES
 from scipy.special import logit
 from scipy.stats import pearsonr
 
 from edelassim.evaluations import find_common_correspondences
+from edelassim.observations import METEOFRANCE_NEW_CLASSES
 
 ############ STATIC
 COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
@@ -18,10 +22,9 @@ fsc_color_def_viirs_mf = [
     (0.0, (0, 0, 0)),  # 0 -> black, no snow
     (1 / 255, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
     (200 / 255, (1, 1, 1)),  # 200 -> white, full snow
-    (219 / 255, (1, 1, 1)),  # 200 -> white, full snow
     (220 / 255, (0, 0, 1)),  # 220 -> blue, water
     (230 / 255, (0.5, 0.5, 0.5)),  # 230 -> gray, no data
-    (1.0, (0.5, 0.5, 0.5)),  # 255 -> gray
+    (255 / 255, (0.5, 0.5, 0.5)),  # 255 -> gray
 ]
 
 FSC_CMAP_VIIRS_MF = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_viirs_mf, N=256)
@@ -39,8 +42,8 @@ FSC_CMAP_S2 = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_s2,
 
 fsc_color_def_edel = [
     (0.0, (0, 0, 0)),  # 0 -> black, no snow
-    (1 / 200, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
-    (200 / 200, (1, 1, 1)),  # 200 -> white, full snow
+    (1 / 100, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
+    (100 / 100, (1, 1, 1)),  # 200 -> white, full snow
 ]
 
 FSC_CMAP_EDEL = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_edel, N=256)
@@ -122,3 +125,29 @@ def plot_snowline_polarplot(snowline_parametrization_dataset: xr.Dataset, ax: Ax
     ax.set_title("Snowline", va="bottom")
     ax.legend()
     return ax
+
+
+def add_colorbar(ax, **kwargs):
+    """Add a colorbar to the given axes, removing any existing one first."""
+    # Remove existing colorbar and its axes
+    if hasattr(ax, "_colorbar"):
+        ax._colorbar.remove()
+    if hasattr(ax, "_colorbar_ax"):
+        ax._colorbar_ax.remove()
+
+    if ax.images:
+        mappable = ax.images[-1]
+    elif ax.collections:
+        mappable = ax.collections[-1]
+    else:
+        raise ValueError("No mappable found in axes")
+
+    fig = ax.figure
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    cb = fig.colorbar(mappable, cax=cax, **kwargs)
+
+    # Store references for cleanup
+    ax._colorbar = cb
+    ax._colorbar_ax = cax
+    return cb

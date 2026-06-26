@@ -46,25 +46,43 @@ if __name__ == "__main__":
     # snowline_calculator.transform(export_path=f"{s2_folder}/snowline_paremetrization.nc")
     # EDELWEISS snowline
     logger.info("Edelweiss preprocesisng")
+
+    # Corresponding for 0.1, 0.2....0.7 m of snow height for 100% snow cover and b=0.11
+    obs_oper_param_list = [1.157, 1.183, 1.22, 1.275, 1.367, 1.55, 2.1]
     edelweiss_ol = xr.open_dataset(f"{edelweiss_folder}/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc").mean(
         dim="member"
     )
-    edelweiss_scf = xr.Dataset({"snow_cover_fraction": dickinson(sd=edelweiss_ol.data_vars["DSN_T_ISBA"], a=1.33, b=0.11)})
+    edelweiss_scf_list = []
+    for param_a in obs_oper_param_list:
+        edelweiss_scf_a = xr.Dataset(
+            {"snow_cover_fraction": dickinson(sd=edelweiss_ol.data_vars["DSN_T_ISBA"], a=param_a, b=0.11)}
+        )
+        # edelweiss_scf_a = edelweiss_scf_a.expand_dims("a")
+        edelweiss_scf_a = edelweiss_scf_a.assign_coords({"a": ("a", [param_a])})
+        edelweiss_scf_list.append(edelweiss_scf_a)
+    edelweiss_scf = xr.concat(objs=edelweiss_scf_list, dim="a")
     georef_netcdf_rioxarray(edelweiss_scf, crs=CRS.from_epsg(2154)).to_netcdf(f"{edelweiss_folder}/regridded.nc")
 
-    logger.info("Edelweiss snowline calculation")
+    edelweiss_snowline_list = []
     topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/topography"
     dem_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
     slope_filepath = f"{topography_data_folder}/250m/SLP_GR_L93_250m.tif"
     aspect_filepath = f"{topography_data_folder}/250m/ASP_GR_L93_250m.tif"
-    snowline_calculator = SnowCoverFractionToSnowline(
-        fsc_image=edelweiss_scf,
-        mnt_data_paths=MountainBinnerConfig(
-            slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
-        ),
-    )
-    snowline_calculator.transform(export_path=f"{edelweiss_folder}/snowline_paremetrization.nc")
+    for a, edelweiss_scf_a in zip(obs_oper_param_list, edelweiss_scf_list):
+        logger.info("Edelweiss snowline calculation")
+        logger.info(f"a = {a}")
+        snowline_calculator = SnowCoverFractionToSnowline(
+            fsc_image=edelweiss_scf_a,
+            mnt_data_paths=MountainBinnerConfig(
+                slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
+            ),
+        )
+        edelweiss_snowline_a = snowline_calculator.transform()
+        edelweiss_snowline_a = edelweiss_snowline_a.assign_coords({"a": ("a", [a])})
+        edelweiss_snowline_list.append(edelweiss_snowline_a)
 
+    edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="a")
+    edelweiss_snowline.to_netcdf(f"{edelweiss_folder}/snowline_paremetrization.nc")
     # # VIIRS snowline
     # logger.info("VIIRS snowline calculation")
     # viirs = xr.open_dataset(f"{viirs_folder}/regrid/mf_fsc_l3_jpss1_grandesrousses_wy_2021_2022.nc")
