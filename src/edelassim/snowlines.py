@@ -1,7 +1,10 @@
+from typing import Dict
+
 import numpy as np
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
 from ndsi_fsc_calibration.snow_cover_products import S2_CLASSES
+from xarray.groupers import BinGrouper
 
 # We define Météo-France class encoding via a dictio
 METEOFRANCE_CLASSES = {
@@ -12,6 +15,18 @@ METEOFRANCE_CLASSES = {
     "nodata": (230,),
     "fill": (254,),
 }
+COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
+
+
+def create_semidistributed_bins(mountain_binner: MountainBinner, dem: xr.DataArray) -> Dict[str, BinGrouper]:
+    alt_min = np.floor(dem.min() / 50) * 50
+    alt_max = np.ceil(dem.max() / 50) * 50
+    bins_dictionary = mountain_binner.create_user_bin_dict(
+        altitude_edges=np.arange(alt_min, alt_max + 50, 50),
+        slope_edges=np.array([0, 8, 30, 50]),
+    )
+    bins_dictionary.update(aspect=MountainBinner.regular_8_aspect_bins())
+    return bins_dictionary
 
 
 def reduce_fsc_to_pixel_counts(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
@@ -138,6 +153,29 @@ def postprocess_snowline_dataset(
     return snowline_parametrization_dataset
 
 
+def find_snowline_from_snow_penalization(snowline_parametrization_dataset: xr.Dataset) -> xr.DataArray:
+    snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
+
+    alt_index = snowline_parametrization_dataset.data_vars["snowline_penalization"].argmin("altitude_min")
+    snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"]
+    return snowline
+
+
+def find_forcing_snowrain_line(phase_dataset: xr.Dataset) -> xr.DataArray:
+    # snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
+
+    def mostly_snow_line(data: xr.DataArray):
+        return (
+            data.where(mostly_snow_mask, drop=True)
+            .coords["altitude_min"][0]
+            .drop_vars(("altitude_bins", "altitude_min", "altitude_max"))
+        )
+
+    mostly_snow_mask = phase_dataset.data_vars["phase_mean"] > 0
+    snowline_middle = phase_dataset.data_vars["phase_mean"].groupby("aspect").map(mostly_snow_line)
+    return xr.DataArray(snowline_middle).reindex({"aspect": list(COMPASS_ROSE_DICT.keys())})
+
+
 class SnowCoverFractionToSnowline:
     """Wrap-up this module for more comfortable user experience."""
 
@@ -153,7 +191,8 @@ class SnowCoverFractionToSnowline:
         self.mnt_data_paths = mnt_data_paths
 
     def transform(self, export_path: str | None = None) -> xr.Dataset:
-        """Concatenate this module functions to pass from a satellite snow cover fraction to snowline diagrams per massif.
+        """Concatenate this module functio
+        ns to pass from a satellite snow cover fraction to snowline diagrams per massif.
 
         :param export_path: export snowline data to netcdf. If None, no export. defaults to None
         :type export_path: str | None, optional
@@ -163,14 +202,7 @@ class SnowCoverFractionToSnowline:
         # Prepare data for reduction (spatially distributed -> semidistributed or categorically distributed)
         mountain_binner = MountainBinner(config=self.mnt_data_paths)
         dem = xr.open_dataarray(self.mnt_data_paths.dem_path)
-        alt_min = np.floor(dem.min() / 50) * 50
-        alt_max = np.ceil(dem.max() / 50) * 50
-        bins_dictionary = mountain_binner.create_user_bin_dict(
-            altitude_edges=np.arange(alt_min, alt_max + 50, 50),
-            slope_edges=np.array([0, 10, 30, 50]),
-        )
-
-        bins_dictionary.update(aspect=MountainBinner.regular_8_aspect_bins())
+        bins_dictionary = create_semidistributed_bins(mountain_binner=mountain_binner, dem=dem)
         reduced = mountain_binner.transform(
             distributed_data=self.snow_cover_fraction,
             bin_dict=bins_dictionary,

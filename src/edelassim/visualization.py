@@ -12,41 +12,20 @@ from scipy.stats import pearsonr
 
 from edelassim.evaluations import find_common_correspondences
 from edelassim.observations import METEOFRANCE_NEW_CLASSES
+from edelassim.snowlines import find_forcing_snowrain_line, find_snowline_from_snow_penalization
 
 ############ STATIC
 COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
 
 
 # Define color stops at specific values
-fsc_color_def_viirs_mf = [
-    (0.0, (0, 0, 0)),  # 0 -> black, no snow
-    (1 / 255, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
-    (200 / 255, (1, 1, 1)),  # 200 -> white, full snow
-    (220 / 255, (0, 0, 1)),  # 220 -> blue, water
-    (230 / 255, (0.5, 0.5, 0.5)),  # 230 -> gray, no data
-    (255 / 255, (0.5, 0.5, 0.5)),  # 255 -> gray
-]
-
-FSC_CMAP_VIIRS_MF = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_viirs_mf, N=256)
-
-fsc_color_def_s2 = [
-    (0.0, (0, 0, 0)),  # 0 -> black, no snow
-    (1 / 255, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
-    (100 / 255, (1, 1, 1)),  # 200 -> white, full snow
-    (204 / 255, (1, 1, 1)),  # 200 -> white, full snow
-    (205 / 255, (0.5, 0.5, 0.5)),  # 205 -> gray, clouds
-    (1.0, (0.5, 0.5, 0.5)),  # 255 -> gray, nodata
-]
-
-FSC_CMAP_S2 = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_s2, N=256)
-
-fsc_color_def_edel = [
+fsc_color_def_snow_cover = [
     (0.0, (0, 0, 0)),  # 0 -> black, no snow
     (1 / 100, (8 / 255, 51 / 255, 112 / 255)),  # 1 -> light blue, 1% snow
-    (100 / 100, (1, 1, 1)),  # 200 -> white, full snow
+    (100 / 100, (1, 1, 1)),  # 100 -> white, full snow
 ]
 
-FSC_CMAP_EDEL = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_edel, N=256)
+FSC_CMAP_SNOW_COVER = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_snow_cover, N=256)
 
 
 def scatter_logit_plot(
@@ -102,38 +81,75 @@ def boxplot_logit_plot(
     ax_logit.legend()
 
 
-def plot_snowline_polarplot(snowline_parametrization_dataset: xr.Dataset, ax: Axes, label: str, color: str) -> None:
+def plot_snowline_polarplot(
+    snowline_per_aspects: np.ndarray,
+    ax: Axes,
+    alt_max: int = 0,
+    alt_min: int = 4800,
+    label: str | None = None,
+    color: str | None = None,
+) -> None:
 
-    # print(snowline_parametrization_dataset)
-    snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
-
-    alt_index = snowline_parametrization_dataset.data_vars["snowline_penalization"].argmin("altitude_min")
-    snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"]
-    print(label, snowline.values)
-    max_alt = snowline_parametrization_dataset.coords["altitude_max"].max()
-    r = snowline
-    theta = [np.deg2rad(COMPASS_ROSE_DICT[asp]) for asp in snowline_parametrization_dataset.coords["aspect"].values]
+    r = snowline_per_aspects
+    # print()
+    theta = np.deg2rad(list(COMPASS_ROSE_DICT.values()))
 
     r = [*r, r[0]]
     theta = [*theta, theta[0]]
-    ax.set_rlim(max_alt, snowline_parametrization_dataset.coords["altitude_max"].min())
-    ax.set_rorigin(max_alt)
+    ax.set_rlim(alt_max, alt_min)
+    ax.set_rorigin(alt_max)
     ax.set_theta_direction(-1)  # Clockwise rotation (standard for maps)
     ax.set_theta_offset(np.pi / 2)
+    # ax.set_rticks([1000, 2000])
+    # ax.rticks(fontsize=9)
+    ax.tick_params(axis="both", labelsize="x-small")
     ax.plot(theta, r, label=label, color=color)
     ax.grid(True)
     ax.set_title("Snowline", va="bottom")
-    ax.legend()
+    ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.2))
     return ax
 
 
+def plot_snowline_polarplot_from_semidistributed(
+    snowline_parametrization_dataset: xr.Dataset,
+    dataset_type: str,
+    ax: Axes,
+    label: str | None = None,
+    color: str | None = None,
+):
+    if dataset_type == "snow_cover":
+        snowline = find_snowline_from_snow_penalization(snowline_parametrization_dataset)
+    elif dataset_type == "forcing":
+        snowline = find_forcing_snowrain_line(snowline_parametrization_dataset)
+    else:
+        raise ValueError("Unknown dataset_type argument. Valid choices are 'snow_cover' and 'forcing'")
+    # print(snowline.values)
+    alt_max = snowline_parametrization_dataset.coords["altitude_max"].max()
+    alt_min = snowline_parametrization_dataset.coords["altitude_max"].min()
+    return plot_snowline_polarplot(
+        snowline_per_aspects=snowline,
+        alt_max=alt_max,
+        alt_min=alt_min,
+        ax=ax,
+        label=label,
+        color=color,
+    )
+
+
 def add_colorbar(ax, **kwargs):
-    """Add a colorbar to the given axes, removing any existing one first."""
-    # Remove existing colorbar and its axes
-    if hasattr(ax, "_colorbar"):
-        ax._colorbar.remove()
-    if hasattr(ax, "_colorbar_ax"):
-        ax._colorbar_ax.remove()
+    """Add a colorbar to the given axes, safely removing any existing one first."""
+    # Safely remove existing colorbar and its axes
+    if hasattr(ax, "_colorbar") and ax._colorbar is not None:
+        try:
+            ax._colorbar.remove()
+        except (AttributeError, ValueError, KeyError):
+            pass  # Already removed or invalid
+
+    if hasattr(ax, "_colorbar_ax") and ax._colorbar_ax is not None:
+        try:
+            ax._colorbar_ax.remove()
+        except (AttributeError, ValueError, KeyError):
+            pass
 
     if ax.images:
         mappable = ax.images[-1]
@@ -147,7 +163,7 @@ def add_colorbar(ax, **kwargs):
     cax = divider.append_axes("right", size="5%", pad=0.05)
     cb = fig.colorbar(mappable, cax=cax, **kwargs)
 
-    # Store references for cleanup
+    # Store references
     ax._colorbar = cb
     ax._colorbar_ax = cax
     return cb

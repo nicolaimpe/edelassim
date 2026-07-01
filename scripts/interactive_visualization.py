@@ -5,17 +5,17 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from matplotlib.widgets import Button, Slider
+from pyproj import CRS
 
-from edelassim.snowlines import valid_snow_cover_fraction_viirs_mf
+from edelassim.snowlines import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
 from edelassim.visualization import (
-    FSC_CMAP_EDEL,
-    FSC_CMAP_S2,
-    FSC_CMAP_VIIRS_MF,
+    FSC_CMAP_SNOW_COVER,
     METEOFRANCE_NEW_CLASSES,
     S2_CLASSES,
     add_colorbar,
-    plot_snowline_polarplot,
+    plot_snowline_polarplot_from_semidistributed,
 )
 
 # Module configuration
@@ -23,18 +23,18 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    s2_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/granderousses/s2"
+    s2_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/s2"
     edelweiss_folder = (
         "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/grandesrousses250m/open_loop/all_members"
     )
-    viirs_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/granderousses/meteofrance/"
-    topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/topography/"
-    forest_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/forest_mask/forest_mask_corine_grandesrousses_max.nc"
-    glacier_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
+    viirs_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/meteofrance/"
+    forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/grandesrousses250m/daily_forcing"
+    topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/"
+    forest_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/forest_mask/forest_mask_corine_grandesrousses_max.nc"
+    glacier_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
 
     labels = ("Sentinel-2", "Edelweiss", "VIIRS")
     colors = ("black", "blue", "red")
-    colormaps = (FSC_CMAP_S2, FSC_CMAP_EDEL, FSC_CMAP_VIIRS_MF)
 
     # Initial date
     current_date = datetime(2021, 11, 1)
@@ -45,34 +45,49 @@ if __name__ == "__main__":
     glacier_mask = xr.open_dataset(glacier_mask_path)
     forest_mask = xr.open_dataset(forest_mask_path).sel(band=1)
     mask = glacier_mask.data_vars["__xarray_dataarray_variable__"] + forest_mask["__xarray_dataarray_variable__"]
+    mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
+    snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
+    mask_20m = mask.rio.reproject_match(snow_cover_s2)
+    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m))
+
+    snow_cover_edel = (
+        xr.open_dataset(f"{edelweiss_folder}/spatial.nc")
+        .data_vars["snow_cover_fraction"]
+        .sortby("y", ascending=False)
+        .where(1 - mask)
+    )
+    snow_cover_viirs = valid_snow_cover_fraction_viirs_mf(
+        xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
+    )
+    snow_cover_data = (snow_cover_s2, snow_cover_edel, snow_cover_viirs)
+    forcing = xr.open_dataset(f"{forcing_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
 
     snowline_s2 = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc")
     snowline_edel = xr.open_dataset(f"{edelweiss_folder}/snowline_paremetrization.nc")
     snowline_viirs = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc")
     snowline_data = (snowline_s2, snowline_edel, snowline_viirs)
 
-    snow_cover_s2 = xr.open_dataset(f"{s2_folder}/regridded.nc").data_vars["snow_cover_fraction"]
-    snow_cover_edel = (
-        xr.open_dataset(f"{edelweiss_folder}/regridded.nc")
-        .data_vars["snow_cover_fraction"]
+    snow_rain_forcing = xr.open_dataset(f"{forcing_folder}/snowline_parametrization.nc")
+    snow_depth_edel = (
+        xr.open_dataset(f"{edelweiss_folder}/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc")
+        .data_vars["DSN_T_ISBA"]
+        .mean(dim="member")
         .sortby("y", ascending=False)
         .where(1 - mask)
     )
-    snow_cover_viirs = xr.open_dataset(f"{viirs_folder}/regridded.nc").data_vars["snow_cover_fraction"].where(1 - mask)
-
-    snow_cover_data = (snow_cover_s2, snow_cover_edel, snow_cover_viirs)
-
     # Determine which days are clear for observations
     n_pixels_area = snow_cover_s2.sizes["x"] * snow_cover_s2.sizes["y"]
     n_data_pixel = snow_cover_s2.count(dim=("x", "y"))
-    cloud_mask_s2 = snow_cover_s2 == S2_CLASSES["clouds"][0]
+    cloud_mask_s2 = snow_cover_s2 >= S2_CLASSES["clouds"][0]
     cloud_flag_s2 = (cloud_mask_s2.sum(dim=("x", "y")) / n_data_pixel > 0.8) | (n_data_pixel / n_pixels_area < 0.3)
     good_dates_s2 = cloud_flag_s2.where(cloud_flag_s2 == 0, drop=True).time.values
     good_dates_s2 = [date.astype("M8[ms]").astype("O") for date in good_dates_s2]
 
     n_data_pixel = snow_cover_viirs.count(dim=("x", "y"))
-    cloud_mask_viirs = snow_cover_viirs == METEOFRANCE_NEW_CLASSES["clouds"][0]
-    cloud_flag_viirs = (cloud_mask_viirs.sum(dim=("x", "y")) / n_data_pixel) > 0.35
+    # print(n_data_pixel)
+    # print(n_data_pixel)
+    # cloud_mask_viirs = np.isnan(snow_cover_viirs)
+    cloud_flag_viirs = (n_data_pixel / (snow_cover_viirs.sizes["x"] * snow_cover_viirs.sizes["y"])) < 0.50
     good_dates_viirs = cloud_flag_viirs.where(cloud_flag_viirs == 0, drop=True).time.values
     good_dates_viirs = [date.astype("M8[ms]").astype("O") for date in good_dates_viirs]
 
@@ -82,17 +97,23 @@ if __name__ == "__main__":
     current_a = a_values[0]
 
     # Create figure and polar axes
-    fig = plt.figure(figsize=(20, 5))
-    ax_snowlines = fig.add_subplot(155, projection="polar")
-    ax_viirs = fig.add_subplot(153)
-    ax_s2 = fig.add_subplot(151)
-    ax_edelweiss = fig.add_subplot(152)
-    ax_diff = fig.add_subplot(154)
-    axs = [ax_s2, ax_edelweiss, ax_viirs, ax_diff, ax_snowlines]
+    fig = plt.figure(figsize=(20, 10))
+    ax_snowlines = fig.add_subplot(2, 5, 5, projection="polar")
+    ax_viirs = fig.add_subplot(2, 5, 3)
+    ax_s2 = fig.add_subplot(2, 5, 1)
+    ax_edelweiss = fig.add_subplot(2, 5, 2)
+    ax_diff = fig.add_subplot(2, 5, 4)
+    ax_snow_depth = fig.add_subplot(2, 5, 7)
+    ax_precip = fig.add_subplot(2, 5, 8)
+    ax_phase = fig.add_subplot(2, 5, 9)
+    ax_snow_rain_line = fig.add_subplot(2, 5, 10, projection="polar")
+    # ax_temperature = fig.add_subplot(258)
+    axs_snow_cover = [ax_s2, ax_edelweiss, ax_viirs]
+    axs_all = [*axs_snow_cover, ax_diff, ax_precip, ax_snowlines, ax_precip, ax_phase, ax_snow_rain_line]
     # fig, axs = plt.subplots(1, 2, figsize=(5, 8), subplot_kw={"projection": "polar"}, layout="constrained")
-    fig.subplots_adjust(bottom=0.25)  # Room for buttons
+    # fig.subplots_adjust(bottom=0.35)  # Room for buttons
     date_text = fig.suptitle(str(current_date.date()), y=0.92)
-    a_text = fig.text(s=f"a = {current_a}", y=0.80, x=0.285)
+    a_text = fig.text(s=f"a = {current_a}", y=0.65, x=0.30)
 
     # Create button axes
     button_width = 0.1
@@ -104,8 +125,8 @@ if __name__ == "__main__":
     ax_d_plus = plt.axes([0.35, button_y1, button_width, button_height])
     ax_m_minus = plt.axes([0.5, button_y1, button_width, button_height])
     ax_m_plus = plt.axes([0.65, button_y1, button_width, button_height])
-    ax_a_minus = plt.axes([0.27, 0.75, 0.015, 0.04])
-    ax_a_plus = plt.axes([0.30, 0.75, 0.015, 0.04])
+    ax_a_minus = plt.axes([0.30, 0.60, 0.015, 0.04])
+    ax_a_plus = plt.axes([0.33, 0.60, 0.015, 0.04])
 
     ax_next_good_viirs = plt.axes([0.5, button_y2, button_width, button_height])
     ax_prev_good_viirs = plt.axes([0.35, button_y2, button_width, button_height])
@@ -122,46 +143,82 @@ if __name__ == "__main__":
     btn_prev_good_s2 = Button(ax_prev_good_s2, "Prev Good S2")
     btn_a_minus = Button(ax_a_minus, "a-")
     btn_a_plus = Button(ax_a_plus, "a+")
-    plt.subplots_adjust(bottom=-0.25)
+    fig.subplots_adjust(bottom=0.35)
+    fig.subplots_adjust(left=0.05)
+    fig.subplots_adjust(right=0.98)
 
     def update_plot():
-        [ax.clear() for ax in axs]
+        [ax.clear() for ax in axs_all]
 
-        for i, (snowline, snow_cover, label, color, colormap) in enumerate(
-            zip(snowline_data, snow_cover_data, labels, colors, colormaps)
+        for snowline, snow_cover, ax_snow_cover, label, color in zip(
+            snowline_data, snow_cover_data, axs_snow_cover, labels, colors
         ):
-            try:
+            # print(label)
+            # print(current_date)
+            # # print(snowline.coords["time"].values)
+            # print(np.datetime64(current_date) in snowline.coords["time"].values)
+            if np.datetime64(current_date) in snowline.coords["time"]:
                 snowline_to_plot = snowline.sel(time=current_date).sel(slope="10 - 30")
                 if label == "Edelweiss":
                     snowline_to_plot = snowline_to_plot.sel(a=current_a)
                     snow_cover = snow_cover.sel(a=current_a)
-                plot_snowline_polarplot(
-                    snowline_parametrization_dataset=snowline_to_plot,
-                    ax=ax_snowlines,
-                    label=label,
-                    color=color,
-                )
-
-                axs[i].imshow(snow_cover.sel(time=current_date), cmap=colormap)
-                axs[i].set_title(label)
-                # Do not remove ticks for the snowline plot
-                [ax.set_xticks([]) for ax in axs[:-1]]
-                [ax.set_yticks([]) for ax in axs[:-1]]
-                add_colorbar(ax=axs[i])
-                # fig.colorbar()
-            except KeyError:
+            else:
                 continue
+            plot_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=snowline_to_plot,
+                dataset_type="snow_cover",
+                ax=ax_snowlines,
+                label=label,
+                color=color,
+            )
+            # print(axs[i])
+            # FSC_CMAP_SNOW_COVER.set_bad("gray")
+            FSC_CMAP_SNOW_COVER.set_bad("gray")
+            ax_snow_cover.imshow(snow_cover.sel(time=current_date), cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
+            ax_snow_cover.set_title(label)
+            ax_snow_cover.set_xticks([]), ax_snow_cover.set_yticks([])
 
-        diff_edel_viirs = snow_cover_edel.sel(time=current_date, a=current_a) - valid_snow_cover_fraction_viirs_mf(
-            snow_cover_viirs.sel(time=current_date)
-        )
+            add_colorbar(ax=ax_snow_cover)
 
-        im_diff = ax_diff.imshow(diff_edel_viirs, cmap="coolwarm_r", vmin=-1, vmax=1)
+        diff_edel_viirs = snow_cover_edel.sel(time=current_date, a=current_a) - snow_cover_viirs.sel(time=current_date)
+        diff_cmap = plt.get_cmap("coolwarm_r")
+        diff_cmap.set_bad("gray")
+        ax_diff.imshow(diff_edel_viirs, cmap=diff_cmap, vmin=-1, vmax=1)
         ax_diff.set_title("Diff Edelweiss - VIIRS")
+        ax_diff.set_xticks([]), ax_diff.set_yticks([])
+        add_colorbar(ax=ax_diff)
         # [ax.legend() for ax in axs]
 
-        date_text.set_text(str(current_date.date()))
+        ax_snow_depth.imshow(snow_depth_edel.sel(time=current_date), cmap="Blues_r")
+        ax_snow_depth.set_title("Snow depth Edelweiss")
+        ax_snow_depth.set_xticks([]), ax_snow_depth.set_yticks([])
+        add_colorbar(ax=ax_snow_depth)
 
+        total_precip = (forcing.data_vars["total_rain"] + forcing.data_vars["total_snow"]).sel(time=current_date) * 3600
+        ax_precip.imshow(total_precip, cmap="viridis")  # , vmin=0, vmax=50)
+        ax_precip.set_title("Total precipitation")
+        ax_precip.set_xticks([]), ax_precip.set_yticks([])
+        add_colorbar(ax=ax_precip)
+
+        ax_phase.imshow(forcing.data_vars["phase_mean"].sel(time=current_date), cmap="Blues_r")
+        ax_phase.set_title("Mean phase")
+        ax_phase.set_xticks([]), ax_phase.set_yticks([])
+        add_colorbar(ax=ax_phase)
+
+        current_phase_line = snow_rain_forcing.sel(time=current_date)
+
+        try:
+            plot_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=current_phase_line,
+                ax=ax_snow_rain_line,
+                dataset_type="forcing",
+            )
+            ax_snow_rain_line.set_title("Forcing snow-rain line")
+        except IndexError:
+            print("ciao")
+
+        date_text.set_text(str(current_date.date()))
+        # Do not remove ticks for the snowline plot
         fig.canvas.draw_idle()
 
     def change_day(delta):
@@ -258,5 +315,5 @@ if __name__ == "__main__":
 
     update_plot()
 
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.show()
