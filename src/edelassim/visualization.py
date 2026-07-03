@@ -81,6 +81,25 @@ def boxplot_logit_plot(
     ax_logit.legend()
 
 
+def set_polarplot(
+    ax: Axes,
+    alt_max: int = 0,
+    alt_min: int = 4800,
+) -> Axes:
+
+    ax.set_rlim(alt_max, alt_min)
+    ax.set_rorigin(alt_max)
+    ax.set_theta_direction(-1)  # Clockwise rotation (standard for maps)
+    ax.set_theta_offset(np.pi / 2)
+    # ax.set_rticks([1000, 2000])
+    # ax.rticks(fontsize=9)
+    ax.tick_params(axis="both", labelsize="x-small")
+    ax.grid(True)
+    ax.set_title("Snowline", va="bottom")
+    ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.2))
+    return ax
+
+
 def plot_snowline_polarplot(
     snowline_per_aspects: np.ndarray,
     ax: Axes,
@@ -90,23 +109,33 @@ def plot_snowline_polarplot(
     color: str | None = None,
 ) -> None:
 
+    set_polarplot(ax=ax, alt_max=alt_max, alt_min=alt_min)
     r = snowline_per_aspects
-    # print()
     theta = np.deg2rad(list(COMPASS_ROSE_DICT.values()))
-
     r = [*r, r[0]]
     theta = [*theta, theta[0]]
-    ax.set_rlim(alt_max, alt_min)
-    ax.set_rorigin(alt_max)
-    ax.set_theta_direction(-1)  # Clockwise rotation (standard for maps)
-    ax.set_theta_offset(np.pi / 2)
-    # ax.set_rticks([1000, 2000])
-    # ax.rticks(fontsize=9)
-    ax.tick_params(axis="both", labelsize="x-small")
     ax.plot(theta, r, label=label, color=color)
-    ax.grid(True)
-    ax.set_title("Snowline", va="bottom")
-    ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.2))
+    return ax
+
+
+def plot_ensemble_snowline_polarplot(
+    snowline_per_aspects_upper: np.ndarray,
+    snowline_per_aspects_lower: np.ndarray,
+    ax: Axes,
+    alt_max: int = 0,
+    alt_min: int = 4800,
+    label: str | None = None,
+    color: str | None = None,
+) -> None:
+
+    set_polarplot(ax=ax, alt_max=alt_max, alt_min=alt_min)
+    theta = np.deg2rad(list(COMPASS_ROSE_DICT.values()))
+    theta = [*theta, theta[0]]
+    r_upper = snowline_per_aspects_upper
+    r_upper = [*r_upper, r_upper[0]]
+    r_lower = snowline_per_aspects_lower
+    r_lower = [*r_lower, r_lower[0]]
+    ax.fill_between(theta, r_lower, r_upper, label=label, color=color, alpha=0.5)
     return ax
 
 
@@ -128,6 +157,37 @@ def plot_snowline_polarplot_from_semidistributed(
     alt_min = snowline_parametrization_dataset.coords["altitude_max"].min()
     return plot_snowline_polarplot(
         snowline_per_aspects=snowline,
+        alt_max=alt_max,
+        alt_min=alt_min,
+        ax=ax,
+        label=label,
+        color=color,
+    )
+
+
+def plot_ensemble_snowline_polarplot_from_semidistributed(
+    snowline_parametrization_dataset_upper: xr.Dataset,
+    snowline_parametrization_dataset_lower: xr.Dataset,
+    dataset_type: str,
+    ax: Axes,
+    label: str | None = None,
+    color: str | None = None,
+):
+
+    if dataset_type == "snow_cover":
+        snowline_upper = find_snowline_from_snow_penalization(snowline_parametrization_dataset_upper)
+        snowline_lower = find_snowline_from_snow_penalization(snowline_parametrization_dataset_lower)
+    elif dataset_type == "forcing":
+        snowline_upper = find_forcing_snowrain_line(snowline_parametrization_dataset_upper)
+        snowline_lower = find_forcing_snowrain_line(snowline_parametrization_dataset_lower)
+    else:
+        raise ValueError("Unknown dataset_type argument. Valid choices are 'snow_cover' and 'forcing'")
+    # print(snowline.values)
+    alt_max = snowline_parametrization_dataset_upper.coords["altitude_max"].max()
+    alt_min = snowline_parametrization_dataset_upper.coords["altitude_max"].min()
+    return plot_ensemble_snowline_polarplot(
+        snowline_per_aspects_lower=snowline_lower,
+        snowline_per_aspects_upper=snowline_upper,
         alt_max=alt_max,
         alt_min=alt_min,
         ax=ax,
@@ -167,3 +227,11 @@ def add_colorbar(ax, **kwargs):
     ax._colorbar = cb
     ax._colorbar_ax = cax
     return cb
+
+
+def plot_elevation_lines(ax: Axes, dem: xr.DataArray, elevation_step: int = 300):
+    elevation_min = np.floor(dem.min() / elevation_step) * elevation_step
+    elevation_max = np.ceil(dem.max() / elevation_step) * elevation_step
+    levels = np.arange(elevation_min, elevation_max, elevation_step)
+    elevation_lines = ax.contour(dem.values, levels=levels, colors="black", linewidths=0.2)
+    ax.clabel(elevation_lines, levels, inline=True, fontsize=5, fmt="%.1f")

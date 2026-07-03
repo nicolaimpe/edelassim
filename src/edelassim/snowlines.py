@@ -18,11 +18,13 @@ METEOFRANCE_CLASSES = {
 COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
 
 
-def create_semidistributed_bins(mountain_binner: MountainBinner, dem: xr.DataArray) -> Dict[str, BinGrouper]:
-    alt_min = np.floor(dem.min() / 50) * 50
-    alt_max = np.ceil(dem.max() / 50) * 50
+def create_semidistributed_bins(
+    mountain_binner: MountainBinner, dem: xr.DataArray, alt_step: int = 50
+) -> Dict[str, BinGrouper]:
+    alt_min = np.floor(dem.min() / alt_step) * alt_step - alt_step / 2
+    alt_max = np.ceil(dem.max() / alt_step) * alt_step + alt_step / 2
     bins_dictionary = mountain_binner.create_user_bin_dict(
-        altitude_edges=np.arange(alt_min, alt_max + 50, 50),
+        altitude_edges=np.arange(alt_min, alt_max + alt_step, alt_step),
         slope_edges=np.array([0, 8, 30, 50]),
     )
     bins_dictionary.update(aspect=MountainBinner.regular_8_aspect_bins())
@@ -41,26 +43,22 @@ def reduce_fsc_to_pixel_counts(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
     # there's a water class for lakes and rivers to consider
 
     # snow cover threshold
-    snow_cover_fraction = fsc_and_auxiliary.data_vars["snow_cover_fraction"]
+    snow_cover_fraction = fsc_and_auxiliary.data_vars["snow_cover_fraction"].unstack()
     snow_cover_mask = snow_cover_fraction >= 0.5
     return xr.Dataset(
         {
-            "snow_cover_sum": snow_cover_fraction.sum(),
-            "land_sum": (1 - snow_cover_fraction).sum(),
-            "n_snow_cover_pixels": snow_cover_mask.sum(),
-            "total_valid": snow_cover_fraction.count(),
+            "snow_cover_sum": snow_cover_fraction.sum(dim=("x", "y")),
+            "land_sum": (1 - snow_cover_fraction).sum(dim=("x", "y")),
+            "n_snow_cover_pixels": snow_cover_mask.sum(dim=("x", "y")),
+            "total_valid": snow_cover_fraction.count(dim=("x", "y")),
         }
     )
 
 
-def count_time_series_snow_pixels(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
-    return fsc_and_auxiliary.groupby("time").map(reduce_fsc_to_pixel_counts)
-
-
 def valid_snow_cover_fraction_viirs_mf(viirs_mf_data: xr.DataArray) -> xr.DataArray:
-    satellite_fsc_data = viirs_mf_data.where(viirs_mf_data != METEOFRANCE_CLASSES["water"], 0)
-    valid_data_mask = satellite_fsc_data < METEOFRANCE_CLASSES["nodata"]
-    valid_snow_cover_fraction = satellite_fsc_data.where(valid_data_mask) / METEOFRANCE_CLASSES["snow_cover"][-1]
+    # satellite_fsc_data = viirs_mf_data.where(viirs_mf_data != METEOFRANCE_CLASSES["water"], 0)
+    valid_data_mask = viirs_mf_data < METEOFRANCE_CLASSES["water"]
+    valid_snow_cover_fraction = viirs_mf_data.where(valid_data_mask) / METEOFRANCE_CLASSES["snow_cover"][-1]
     return valid_snow_cover_fraction
 
 
@@ -155,9 +153,14 @@ def postprocess_snowline_dataset(
 
 def find_snowline_from_snow_penalization(snowline_parametrization_dataset: xr.Dataset) -> xr.DataArray:
     snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
-
     alt_index = snowline_parametrization_dataset.data_vars["snowline_penalization"].argmin("altitude_min")
+    altitude_step = (
+        snowline_parametrization_dataset.coords["altitude_min"][1] - snowline_parametrization_dataset.coords["altitude_min"][0]
+    )
+
     snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"]
+    # Recover the center of altitude bins used for snowline calculation
+    snowline = snowline + altitude_step // 2
     return snowline
 
 
@@ -165,11 +168,14 @@ def find_forcing_snowrain_line(phase_dataset: xr.Dataset) -> xr.DataArray:
     # snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
 
     def mostly_snow_line(data: xr.DataArray):
-        return (
+        snowline = (
             data.where(mostly_snow_mask, drop=True)
             .coords["altitude_min"][0]
             .drop_vars(("altitude_bins", "altitude_min", "altitude_max"))
         )
+        # Recover the center of altitude bins used for snowline calculation
+        altitude_step = data.coords["altitude_min"][1] - data.coords["altitude_min"][0]
+        return snowline + altitude_step // 2
 
     mostly_snow_mask = phase_dataset.data_vars["phase_mean"] > 0
     snowline_middle = phase_dataset.data_vars["phase_mean"].groupby("aspect").map(mostly_snow_line)
@@ -202,11 +208,11 @@ class SnowCoverFractionToSnowline:
         # Prepare data for reduction (spatially distributed -> semidistributed or categorically distributed)
         mountain_binner = MountainBinner(config=self.mnt_data_paths)
         dem = xr.open_dataarray(self.mnt_data_paths.dem_path)
-        bins_dictionary = create_semidistributed_bins(mountain_binner=mountain_binner, dem=dem)
+        bins_dictionary = create_semidistributed_bins(mountain_binner=mountain_binner, dem=dem, alt_step=100)
         reduced = mountain_binner.transform(
             distributed_data=self.snow_cover_fraction,
             bin_dict=bins_dictionary,
-            function=count_time_series_snow_pixels,
+            function=reduce_fsc_to_pixel_counts,
         )
 
         # Convert reduction to some metrics that can be directly used for snowline
