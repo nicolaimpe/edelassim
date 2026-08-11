@@ -1,9 +1,7 @@
 import glob
 import logging
 import os
-import shutil
 
-import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
@@ -38,33 +36,29 @@ if __name__ == "__main__":
     aspect_filepath = f"{topography_data_folder}/250m/ASP_GR_L93_250m.tif"
     output_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/grandesrousses250m/daily_forcing"
 
-    # logging.info("Loading data")
-    # forcing = xr.open_mfdataset(sorted(forcing_files), engine="snowtools", combine="nested", concat_dim="member")
-    # forcing = forcing.mean(dim="member").rename({"xx": "x", "yy": "y"})
-    # phase = xr.Dataset(
-    #     {
-    #         "phase": (forcing.data_vars["Snowf"] - forcing.data_vars["Rainf"])
-    #         / (forcing.data_vars["Snowf"] + forcing.data_vars["Rainf"])
-    #     }
-    # )
-    # total_precip = forcing.data_vars["Snowf"] + forcing.data_vars["Rainf"]
+    logging.info("Loading data")
+    forcing = xr.open_mfdataset(sorted(forcing_files), engine="snowtools", combine="nested", concat_dim="member")
+    forcing = forcing.rename({"xx": "x", "yy": "y"})
+    forcing = forcing.assign_coords({"member": np.arange(0, 17)})
 
-    # logging.info("Computing grid daily information")
-    # phase_min_daily = daily_min(phase.data_vars["phase"])
-    # phase_max_daily = daily_max(phase.data_vars["phase"])
-    # phase_mean_daily = daily_mean(phase.data_vars["phase"])
+    total_snowfall = forcing.data_vars["Snowf"].resample(time="D").sum()
+    total_rainfall = forcing.data_vars["Rainf"].resample(time="D").sum()
+    total_precip = total_snowfall + total_rainfall
+    phase = xr.Dataset({"phase": (total_snowfall - total_rainfall) / total_precip})
 
-    # forcing_processed_spatial_dataset = xr.Dataset(
-    #     {
-    #         # "precip_total": total_precip.forcing.data_vars["Rainf"],
-    #         "phase_min": phase_min_daily,
-    #         "phase_max": phase_max_daily,
-    #         "phase_mean": phase_mean_daily,
-    #         "total_rain": forcing.data_vars["Rainf"].resample(time="D").sum(),
-    #         "total_snow": forcing.data_vars["Snowf"].resample(time="D").sum(),
-    #     }
-    # )
-    # forcing_processed_spatial_dataset.to_netcdf(f"{output_folder}/spatial.nc")
+    logging.info("Computing grid daily information")
+    forcing_processed_spatial_dataset = xr.Dataset(
+        {
+            "precip_total": total_precip * 3600,
+            # "phase_min": phase_min_daily,
+            # "phase_max": phase_max_daily,
+            "phase": phase.data_vars["phase"],
+            # "total_rain": forcing.data_vars["Rainf"].resample(time="D").sum(),
+            # "total_snow": forcing.data_vars["Snowf"].resample(time="D").sum(),
+        }
+    )
+    forcing.close()
+    forcing_processed_spatial_dataset.to_netcdf(f"{output_folder}/spatial.nc")
 
     logging.info("Computing snowline")
     forcing_daily = xr.open_dataset(f"{output_folder}/spatial.nc")
@@ -72,8 +66,14 @@ if __name__ == "__main__":
         MountainBinnerConfig(slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath)
     )
 
-    bin_dictionary = create_semidistributed_bins(mountain_binner=mountain_binner, dem=xr.open_dataarray(dem_filepath))
-    bin_dictionary.update(time=xr.groupers.UniqueGrouper())
+    bin_dictionary = create_semidistributed_bins(
+        mountain_binner=mountain_binner, dem=xr.open_dataarray(dem_filepath), alt_step=100
+    )
+
+    def mean_with_log(data: xr.DataArray):
+        logging.info(data.altitude.values[0])
+        return data.unstack().mean(dim=("x", "y"))
+
     transformed = mountain_binner.prepare(distributed_data=forcing_daily, bin_dict=bin_dictionary).mean()
 
     transformed = transformed.drop_vars(("slope", "aspect", "altitude"))

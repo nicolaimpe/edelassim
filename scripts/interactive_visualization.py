@@ -127,19 +127,12 @@ def update_plot():
     [ax.clear() for ax in axs_all]
     # Determine ensemble visualization indexes
 
-    mb_big_snow = 15
-    mb_little_snow = 2
     for snowline, label, color in zip(snowline_data, labels, colors):
-        # print(label)
-        # print(current_date)
-        # # print(snowline.coords["time"].values)
-        # print(np.datetime64(current_date) in snowline.coords["time"].values)
         if np.datetime64(current_date) in snowline.coords["time"]:
-            snowline_to_plot = snowline.sel(time=current_date).sel(slope="8 - 30")
+            snowline_to_plot = snowline.sel(time=current_date, slope="8 - 30")
             if label == "Edelweiss":
                 plot_ensemble_snowline_polarplot_from_semidistributed(
-                    snowline_parametrization_dataset_upper=snowline_to_plot.sel(a=current_a, member=mb_big_snow),
-                    snowline_parametrization_dataset_lower=snowline_to_plot.sel(a=current_a, member=mb_little_snow),
+                    snowline_parametrization_dataset=snowline_to_plot.sel(a=current_a),
                     dataset_type="snow_cover",
                     ax=ax_snowlines,
                     color=color,
@@ -147,6 +140,7 @@ def update_plot():
                 snowline_to_plot = snowline_to_plot.sel(a=current_a, member=current_member)
         else:
             continue
+
         plot_snowline_polarplot_from_semidistributed(
             snowline_parametrization_dataset=snowline_to_plot,
             dataset_type="snow_cover",
@@ -194,7 +188,7 @@ def update_plot():
     add_colorbar(ax=ax_snow_depth)
     plot_elevation_lines(ax=ax_snow_depth, dem=dem_250m)
 
-    total_precip = (forcing.data_vars["total_rain"] + forcing.data_vars["total_snow"]).sel(time=current_date) * 3600
+    total_precip = forcing.data_vars["precip_total"].sel(time=current_date, member=current_member)
     precip_cmap = plt.get_cmap("viridis")
     precip_cmap.set_bad("gray")
     ax_precip.imshow(total_precip, cmap=precip_cmap)  # , vmin=0, vmax=50)
@@ -203,24 +197,32 @@ def update_plot():
     add_colorbar(ax=ax_precip)
     plot_elevation_lines(ax=ax_precip, dem=dem_250m)
 
+    ######### FORCING ###########
     phase_cmap = plt.get_cmap("Blues_r")
     phase_cmap.set_bad("gray")
-    ax_phase.imshow(forcing.data_vars["phase_mean"].sel(time=current_date), cmap=phase_cmap, vmin=-1, vmax=1)
-    ax_phase.set_title("Mean phase")
+    ax_phase.imshow(forcing.data_vars["phase"].sel(time=current_date, member=current_member), cmap=phase_cmap, vmin=-1, vmax=1)
+    ax_phase.set_title("Phase")
     ax_phase.set_xticks([]), ax_phase.set_yticks([])
     add_colorbar(ax=ax_phase)
     plot_elevation_lines(ax=ax_phase, dem=dem_250m)
 
-    current_phase_line = snow_rain_forcing.sel(time=current_date)
-
     try:
-        plot_snowline_polarplot_from_semidistributed(
-            snowline_parametrization_dataset=current_phase_line,
-            ax=ax_snow_rain_line,
-            dataset_type="forcing",
-        )
-        ax_snow_rain_line.set_title("Forcing snow-rain line")
-    except IndexError as e:
+        if not np.all(np.isnan(snow_rain_forcing.sel(time=current_date, slope_bins="8 - 30").data_vars["phase"])):
+            plot_ensemble_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=snow_rain_forcing.sel(time=current_date, slope_bins="8 - 30"),
+                ax=ax_snow_rain_line,
+                dataset_type="forcing",
+            )
+            current_phase_line = snow_rain_forcing.sel(time=current_date, member=current_member, slope_bins="8 - 30")
+            plot_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=current_phase_line,
+                ax=ax_snow_rain_line,
+                dataset_type="forcing",
+            )
+            ax_snow_rain_line.set_title("Forcing snow-rain line")
+        else:
+            logging.info(f"no phase on day {current_date}")
+    except ValueError as e:
         logging.info(f"Exception caught {e}")
 
     date_text.set_text(str(current_date.date()))
@@ -253,9 +255,9 @@ if __name__ == "__main__":
     ########################### Visualization ##########################################################
     logger.info("Plotting")
 
-    glacier_mask = xr.open_dataset(glacier_mask_path)
-    forest_mask = xr.open_dataset(forest_mask_path).sel(band=1)
-    mask = glacier_mask.data_vars["__xarray_dataarray_variable__"] + forest_mask["__xarray_dataarray_variable__"]
+    glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
+    forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
+    mask = glacier_mask + forest_mask
     mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
     snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
     mask_20m = mask.rio.reproject_match(snow_cover_s2)
@@ -268,7 +270,7 @@ if __name__ == "__main__":
         xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
     )
 
-    forcing = xr.open_dataset(f"{forcing_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
+    forcing = xr.open_mfdataset(f"{forcing_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
 
     snowline_s2 = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc")
     snowline_edel = xr.open_dataset(f"{edelweiss_folder}/snowline_paremetrization.nc")
@@ -283,18 +285,17 @@ if __name__ == "__main__":
         .where(1 - mask)
     )
 
-    # print(snow_depth_edel.quantile(0.10).sum())
     # Determine which days are clear for observations
     n_pixels_area = snow_cover_s2.sizes["x"] * snow_cover_s2.sizes["y"]
     n_data_pixel = snow_cover_s2.count(dim=("x", "y"))
     cloud_mask_s2 = snow_cover_s2 >= S2_CLASSES["clouds"][0]
+    # Quick criterium to determine whether a Sentinel-2 image is exploitable
     cloud_flag_s2 = (cloud_mask_s2.sum(dim=("x", "y")) / n_data_pixel > 0.8) | (n_data_pixel / n_pixels_area < 0.3)
     good_dates_s2 = cloud_flag_s2.where(cloud_flag_s2 == 0, drop=True).time.values
     good_dates_s2 = [date.astype("M8[ms]").astype("O") for date in good_dates_s2]
 
     n_data_pixel = snow_cover_viirs.count(dim=("x", "y"))
-    # print(n_data_pixel)
-    # print(n_data_pixel)
+
     # cloud_mask_viirs = np.isnan(snow_cover_viirs)
     cloud_flag_viirs = (n_data_pixel / (snow_cover_viirs.sizes["x"] * snow_cover_viirs.sizes["y"])) < 0.50
     good_dates_viirs = cloud_flag_viirs.where(cloud_flag_viirs == 0, drop=True).time.values

@@ -2,21 +2,12 @@ block: meteo
 date: '[dateend]'
 datebegin: '2021080106'
 dateend: '2022080106'
-experiment: ALPAGA@vernaym
+experiment: ALPAGA
+username: vernaym
 geometry: GrandesRousses250m
 kind: MeteorologicalForcing
-filename: /home/imperatoren/work/edelweiss_assimilation/data/forcings/[geometry:tag]/[experiment]/mb[member]/meteo/FORCING_[datebegin]_[dateend].nc
+filename: /home/imperatoren/work/edelweiss_assimilation/data/[geometry:tag]/forcing/[experiment]/mb0[member]/meteo/FORCING_[datebegin]_[dateend].nc
 member:
-- 0
-- 1
-- 2
-- 3
-- 4
-- 5
-- 6
-- 7
-- 8
-- 9
 - 10
 - 11
 - 12
@@ -25,9 +16,8 @@ member:
 - 15
 - 16
 
-model: surfex
 namebuild: flat@cen
 namespace: vortex.multi.fr
 vapp: edelweiss
 vconf: '[geometry:tag]'
-
+vortex1: True # This is useful for basename: when True, filename is FORCING_datebegin_dateend.nc, else FORCING.geometry_datebegin_dateend.nc

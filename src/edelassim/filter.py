@@ -93,7 +93,7 @@ class ParticleFilter(Filter):
 
 
 class SIRParticleFilter(ParticleFilter):
-    """Gordon 1993 boot, astrap filter with particle duplication"""
+    """Gordon 1993 bootstrastrap filter with particle duplication"""
 
     def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime, resampling_algorithm: str):
         super().__init__(assimilation_problem, time_step, resampling_algorithm)
@@ -115,6 +115,30 @@ class PointParticleFilter(SIRParticleFilter):
         y_hat = self.assimilation_problem.observation_operator(self.particles)
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
+        self.weights = new_weights
+
+
+class LocalParticleFilter(SIRParticleFilter):
+    def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime):
+        super().__init__(assimilation_problem, time_step, resampling_algorithm="kitagawa")
+
+    @abc.abstractmethod
+    def compute_correlations(self):
+        pass
+
+    @abc.abstractmethod
+    def distance_function(self):
+        pass
+
+    @abc.abstractmethod
+    def localize(self, field: np.ndarray):
+        return self.distance_function(self.compute_correlations(field))
+
+    def update_weights(self) -> np.ndarray:
+        y = self.assimilation_problem.observation
+        y_hat = self.assimilation_problem.observation_operator(self.particles)
+        inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
+        # new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
         self.weights = new_weights
 
 

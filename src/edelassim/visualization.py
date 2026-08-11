@@ -148,6 +148,7 @@ def plot_snowline_polarplot_from_semidistributed(
 ):
     if dataset_type == "snow_cover":
         snowline = find_snowline_from_snow_penalization(snowline_parametrization_dataset)
+        print("SNOWLINEEEEEEEEE", snowline.values)
     elif dataset_type == "forcing":
         snowline = find_forcing_snowrain_line(snowline_parametrization_dataset)
     else:
@@ -155,6 +156,7 @@ def plot_snowline_polarplot_from_semidistributed(
     # print(snowline.values)
     alt_max = snowline_parametrization_dataset.coords["altitude_max"].max()
     alt_min = snowline_parametrization_dataset.coords["altitude_max"].min()
+
     return plot_snowline_polarplot(
         snowline_per_aspects=snowline,
         alt_max=alt_max,
@@ -166,25 +168,28 @@ def plot_snowline_polarplot_from_semidistributed(
 
 
 def plot_ensemble_snowline_polarplot_from_semidistributed(
-    snowline_parametrization_dataset_upper: xr.Dataset,
-    snowline_parametrization_dataset_lower: xr.Dataset,
+    snowline_parametrization_dataset: xr.Dataset,
     dataset_type: str,
     ax: Axes,
     label: str | None = None,
     color: str | None = None,
+    p_low: int = 10,
+    p_high: int = 90,
 ):
 
     if dataset_type == "snow_cover":
-        snowline_upper = find_snowline_from_snow_penalization(snowline_parametrization_dataset_upper)
-        snowline_lower = find_snowline_from_snow_penalization(snowline_parametrization_dataset_lower)
+        snowline = find_snowline_from_snow_penalization(snowline_parametrization_dataset)
+        snowline_lower = snowline.quantile(q=p_low / 100, dim="member")
+        snowline_upper = snowline.quantile(q=p_high / 100, dim="member")
     elif dataset_type == "forcing":
-        snowline_upper = find_forcing_snowrain_line(snowline_parametrization_dataset_upper)
-        snowline_lower = find_forcing_snowrain_line(snowline_parametrization_dataset_lower)
+        snowline = find_forcing_snowrain_line(snowline_parametrization_dataset)
+        snowline_lower = snowline.quantile(q=p_low / 100, dim="member")
+        snowline_upper = snowline.quantile(q=p_high / 100, dim="member")
     else:
         raise ValueError("Unknown dataset_type argument. Valid choices are 'snow_cover' and 'forcing'")
     # print(snowline.values)
-    alt_max = snowline_parametrization_dataset_upper.coords["altitude_max"].max()
-    alt_min = snowline_parametrization_dataset_upper.coords["altitude_max"].min()
+    alt_max = snowline_parametrization_dataset.coords["altitude_max"].max()
+    alt_min = snowline_parametrization_dataset.coords["altitude_min"].min()
     return plot_ensemble_snowline_polarplot(
         snowline_per_aspects_lower=snowline_lower,
         snowline_per_aspects_upper=snowline_upper,
@@ -197,7 +202,7 @@ def plot_ensemble_snowline_polarplot_from_semidistributed(
 
 
 def add_colorbar(ax, **kwargs):
-    """Add a colorbar to the given axes, safely removing any existing one first."""
+    """Add a colorbar to the given axes, safely removing any existing first."""
     # Safely remove existing colorbar and its axes
     if hasattr(ax, "_colorbar") and ax._colorbar is not None:
         try:

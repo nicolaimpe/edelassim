@@ -19,7 +19,7 @@ COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, 
 
 
 def create_semidistributed_bins(
-    mountain_binner: MountainBinner, dem: xr.DataArray, alt_step: int = 50
+    mountain_binner: MountainBinner, dem: xr.DataArray, alt_step: int = 100
 ) -> Dict[str, BinGrouper]:
     alt_min = np.floor(dem.min() / alt_step) * alt_step - alt_step / 2
     alt_max = np.ceil(dem.max() / alt_step) * alt_step + alt_step / 2
@@ -157,8 +157,7 @@ def find_snowline_from_snow_penalization(snowline_parametrization_dataset: xr.Da
     altitude_step = (
         snowline_parametrization_dataset.coords["altitude_min"][1] - snowline_parametrization_dataset.coords["altitude_min"][0]
     )
-
-    snowline = snowline_parametrization_dataset.isel(altitude_min=list(alt_index)).coords["altitude_min"]
+    snowline = snowline_parametrization_dataset.isel(altitude_min=alt_index).coords["altitude_min"]
     # Recover the center of altitude bins used for snowline calculation
     snowline = snowline + altitude_step // 2
     return snowline
@@ -166,20 +165,9 @@ def find_snowline_from_snow_penalization(snowline_parametrization_dataset: xr.Da
 
 def find_forcing_snowrain_line(phase_dataset: xr.Dataset) -> xr.DataArray:
     # snowline_parametrization_dataset = snowline_parametrization_dataset.swap_dims({"altitude": "altitude_min"})
-
-    def mostly_snow_line(data: xr.DataArray):
-        snowline = (
-            data.where(mostly_snow_mask, drop=True)
-            .coords["altitude_min"][0]
-            .drop_vars(("altitude_bins", "altitude_min", "altitude_max"))
-        )
-        # Recover the center of altitude bins used for snowline calculation
-        altitude_step = data.coords["altitude_min"][1] - data.coords["altitude_min"][0]
-        return snowline + altitude_step // 2
-
-    mostly_snow_mask = phase_dataset.data_vars["phase_mean"] > 0
-    snowline_middle = phase_dataset.data_vars["phase_mean"].groupby("aspect").map(mostly_snow_line)
-    return xr.DataArray(snowline_middle).reindex({"aspect": list(COMPASS_ROSE_DICT.keys())})
+    phase_dataset = phase_dataset.assign({"snowline_penalization": np.abs(phase_dataset.data_vars["phase"])})
+    phase_dataset = phase_dataset.rename_dims({"altitude_bins": "altitude"})
+    return find_snowline_from_snow_penalization(snowline_parametrization_dataset=phase_dataset)
 
 
 class SnowCoverFractionToSnowline:
