@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, List
 
 import numpy as np
 
@@ -19,7 +19,7 @@ class StateVector:
 
 @dataclass
 class Ensemble:
-    members: List[StateVector]
+    members: list[StateVector]
 
     @property
     def n_member(self):
@@ -37,8 +37,8 @@ class Ensemble:
 class AssimilationProblem:
     state: StateVector | Ensemble
     observation: np.ndarray
-    model: Callable
     observation_operator: Callable
+    model: Callable
     prior_covariance_matrix: np.ndarray | None = None
     observation_error_covariance_matrix: np.ndarray | None = None
     inverse_prior_covariance_matrix: np.ndarray | None = None

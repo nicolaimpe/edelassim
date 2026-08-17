@@ -1,13 +1,14 @@
 import abc
+import logging
+from collections.abc import Callable
 from datetime import datetime
 
 import numpy as np
 import xarray as xr
-from assimilation import AssimilationProblem, Ensemble, StateVector
+from matplotlib import pyplot as plt
 from numpy.random import PCG64, Generator
 
-from edelassim.observation_operators import zaitchik
-from edelassim.postprocess_surfex.prep import compute_all_members_snow_tickness_and_mass
+from edelassim.assimilation import AssimilationProblem, Ensemble, StateVector
 
 
 def point_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndarray) -> np.ndarray:
@@ -21,8 +22,12 @@ def point_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndar
     return new_weights
 
 
-def effective_weigths(weights: xr.DataArray):
+def effective_weigths_xarray(weights: xr.DataArray):
     return 1 / (weights**2).sum(dim="member")
+
+
+def effective_weigths(weights: np.ndarray):
+    return 1 / np.sum(weights**2, axis=0)
 
 
 def kitagawa_resampling(weights: np.ndarray) -> np.ndarray:
@@ -44,9 +49,8 @@ def kitagawa_resampling(weights: np.ndarray) -> np.ndarray:
 class Filter:
     """Generic bayesian filter"""
 
-    def __init__(self, assimilation_problem: AssimilationProblem, time_step):
+    def __init__(self, assimilation_problem: AssimilationProblem):
         self.assimilation_problem = assimilation_problem
-        self.time_step = time_step
 
     @abc.abstractmethod
     def prediction(self) -> np.ndarray:
@@ -64,8 +68,8 @@ class Filter:
 class ParticleFilter(Filter):
     """Abstract Particle filter"""
 
-    def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime, resampling_algorithm: str):
-        super().__init__(assimilation_problem, time_step)
+    def __init__(self, assimilation_problem: AssimilationProblem, resampling_algorithm: str):
+        super().__init__(assimilation_problem)
         self.resampling_algorithm = resampling_algorithm
         self.reset_weights()
 
@@ -95,8 +99,8 @@ class ParticleFilter(Filter):
 class SIRParticleFilter(ParticleFilter):
     """Gordon 1993 bootstrastrap filter with particle duplication"""
 
-    def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime, resampling_algorithm: str):
-        super().__init__(assimilation_problem, time_step, resampling_algorithm)
+    def __init__(self, assimilation_problem: AssimilationProblem, resampling_algorithm: str):
+        super().__init__(assimilation_problem, resampling_algorithm)
 
     @property
     def particles(self):
@@ -107,75 +111,137 @@ class SIRParticleFilter(ParticleFilter):
 
 
 class PointParticleFilter(SIRParticleFilter):
-    def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime):
-        super().__init__(assimilation_problem, time_step, resampling_algorithm="kitagawa")
+    def __init__(self, assimilation_problem: AssimilationProblem, inflation: bool = False, min_n_eff: int = 8, min_alpha=0.1):
+        super().__init__(assimilation_problem, resampling_algorithm="kitagawa")
+        self.inflation = inflation
+        self.min_n_eff = min_n_eff
+        self.min_alpha = min_alpha
+
+    def inflate(self, old_weights: np.ndarray, inflation_step: float = 0.01):
+
+        y = self.assimilation_problem.observation
+        y_hat = self.assimilation_problem.observation_operator(self.particles)
+
+        inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
+        alpha = np.ones_like(inv_R_trace)
+        old_n_eff = effective_weigths(old_weights)
+        degenerated_mask = old_n_eff < self.min_n_eff
+
+        iterations = 1
+        n_eff = old_n_eff
+        weights = old_weights
+        alpha[degenerated_mask] -= inflation_step
+        logger.info("Enter inflation loop")
+        while np.sum(degenerated_mask) > 0 and np.min(alpha) > self.min_alpha:
+            logger.info(
+                f"Iteration no. {iterations}, degenerated points {np.sum(degenerated_mask)}, alpha={np.min(alpha):.1f}, R multiplication factor= {1 / np.min(alpha):.1f}"
+            )
+
+            # print(alpha[1:100])
+            # print(1 / inv_R_trace[:100])
+            new_weights = point_particle_filter(
+                y=y[degenerated_mask],
+                y_hat=y_hat[:, degenerated_mask],
+                inv_R_trace=inv_R_trace[degenerated_mask] * alpha[degenerated_mask],
+            )
+            weights[:, degenerated_mask] = new_weights
+            n_eff[degenerated_mask] = effective_weigths(weights=new_weights)
+            degenerated_mask = n_eff < self.min_n_eff
+            iterations += 1
+            alpha[degenerated_mask] -= inflation_step
+        return weights, alpha
 
     def update_weights(self) -> np.ndarray:
         y = self.assimilation_problem.observation
         y_hat = self.assimilation_problem.observation_operator(self.particles)
+        # print(y_hat)
+        # print(y_hat.shape)
+
+        # import matplotlib.pyplot as plt
+
+        # plt.imshow(np.reshape(y_hat[0, :], shape=(143, 101)))
+        # plt.show()
+        # plt.imshow(np.reshape(y, shape=(143, 101)))
+        # plt.show()
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
+        n_eff = effective_weigths(weights=new_weights)
+        # print(n_eff[:100] < self.min_n_eff)
+        # print(np.any(n_eff < self.min_n_eff))
+        if self.inflation and np.any(n_eff < self.min_n_eff):
+            new_weights, alpha = self.inflate(new_weights)
+        df = pd.DataFrame(new_weights).T
+        df.to_csv("weights_20220226.csv")
+        pd.DataFrame(alpha).to_csv("alpha_20220226.csv")
         self.weights = new_weights
 
 
-class LocalParticleFilter(SIRParticleFilter):
-    def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime):
-        super().__init__(assimilation_problem, time_step, resampling_algorithm="kitagawa")
+# class LocalParticleFilter(SIRParticleFilter):
+#     def __init__(self, assimilation_problem: AssimilationProblem, time_step: datetime):
+#         super().__init__(assimilation_problem, time_step, resampling_algorithm="kitagawa")
 
-    @abc.abstractmethod
-    def compute_correlations(self):
-        pass
+#     @abc.abstractmethod
+#     def compute_correlations(self):
+#         pass
 
-    @abc.abstractmethod
-    def distance_function(self):
-        pass
+#     @abc.abstractmethod
+#     def distance_function(self):
+#         pass
 
-    @abc.abstractmethod
-    def localize(self, field: np.ndarray):
-        return self.distance_function(self.compute_correlations(field))
+#     @abc.abstractmethod
+#     def localize(self, field: np.ndarray):
+#         return self.distance_function(self.compute_correlations(field))
 
-    def update_weights(self) -> np.ndarray:
-        y = self.assimilation_problem.observation
-        y_hat = self.assimilation_problem.observation_operator(self.particles)
-        inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
-        # new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
-        self.weights = new_weights
+#     def update_weights(self) -> np.ndarray:
+#         y = self.assimilation_problem.observation
+#         y_hat = self.assimilation_problem.observation_operator(self.particles)
+#         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
+#         # new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
+#         self.weights = new_weights
 
 
 if __name__ == "__main__":
-    import logging
+    import pandas as pd
 
-    import xarray as xr
-    from assimilation import AssimilationProblem, Ensemble, StateVector
+    from edelassim.observation_operators import zaitchik
+    from edelassim.postprocess_surfex.prep import compute_all_members_snow_tickness_and_mass
 
     logger = logging.getLogger("logger")
     logging.basicConfig(level=logging.INFO)
-    slope_map = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses/auxiliary/topography/slope.tif"
+    slope_map = (
+        "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/250m/SLP_GR_L93_250m.tif"
+    )
     prep_files = []
     folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/grandesrousses250m/assim_viirs_local"
     obs_filename = f"{folder}/OBSERVATIONS_220226H12.nc"
     for i in range(1, 18):
         prep_files.append(f"{folder}/PREP_220226H12_PF_ENS{i}.nc")
-    observation = (xr.open_dataset(obs_filename).rename({"xx": "x", "yy": "y"}).stack(n_point=("x", "y"))).data_vars["SCF"]
-    obs_time = datetime.strptime(obs_filename.split(".")[0][-9:], "%Y%dH%H")
+    observation = (xr.open_dataset(obs_filename).rename({"xx": "x", "yy": "y"}).stack(n_point=("y", "x"))).data_vars["SCF"]
+    # obs_time = datetime.strptime(obs_filename.split(".")[0][-9:], "%Y%dH%H")
     # swe_data = compute_all_members_snow_tickness_and_mass(prep_files=prep_files, slope_file=slope_map).data_vars["swe"]
     # swe_data.to_netcdf("swe_data.nc")
-    swe_data = xr.open_dataset("swe_data.nc").data_vars["swe"].stack(n_point=("x", "y"))
+    swe_data = xr.open_dataset("swe_data.nc").data_vars["swe"]
+    swe_data = swe_data.reindex(y=swe_data.coords["y"].sortby("y"), x=swe_data.coords["x"].sortby("x"))
+    swe_data = swe_data.stack(n_point=("y", "x"))
+    # print(swe_data.isel(n_point=slice(1, 100)).coords["x"])
+    # print(swe_data.isel(n_point=slice(1, 100)).coords["y"])
+
     swe_ensemble = Ensemble(members=[StateVector(swe_data.sel(member=i).values) for i in range(swe_data.sizes["member"])])
     observation_operator = zaitchik
-    dummy_model = lambda x: x
     avg_sigma_obs = 0.15
 
     inv_R = 1 / avg_sigma_obs**2 * np.eye(swe_data.sizes["n_point"])
     assim_problem = AssimilationProblem(
         state=swe_ensemble,
         observation=observation.values,
-        model=dummy_model,
+        model=lambda x: x,  # dummy model, only interested in update step now
         observation_operator=observation_operator,
         inverse_observation_error_covariance_matrix=inv_R,
     )
     logger.info("Creating particle filter object")
-    particle_filter = PointParticleFilter(assimilation_problem=assim_problem, time_step=obs_time)
+    particle_filter = PointParticleFilter(assimilation_problem=assim_problem, inflation=True)
     logger.info("Run assimilation")
-    duplicated_particles_array = particle_filter.run()
-    print(duplicated_particles_array)
+    duplicated_particles_array = particle_filter.update()
+    # print(duplicated_particles_array.T[20:25, :])
+    df = pd.DataFrame(duplicated_particles_array).T
+    df.to_csv("part_20220226.csv")
