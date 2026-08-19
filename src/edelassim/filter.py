@@ -22,28 +22,45 @@ def point_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndar
     return new_weights
 
 
-def effective_weigths_xarray(weights: xr.DataArray):
+def effective_weights_xarray(weights: xr.DataArray):
     return 1 / (weights**2).sum(dim="member")
 
 
-def effective_weigths(weights: np.ndarray):
+def effective_weights(weights: np.ndarray):
     return 1 / np.sum(weights**2, axis=0)
 
 
-def kitagawa_resampling(weights: np.ndarray) -> np.ndarray:
+def reorder_1d_array(resampling_duplication_point: np.ndarray) -> np.ndarray:
+    unique_values, counts = np.unique(resampling_duplication_point, return_counts=True)
+    reordered_array = np.zeros_like(resampling_duplication_point)
+    reordered_array[unique_values - 1] = unique_values
+    leftovers = np.repeat(unique_values[counts > 1], counts[counts > 1] - 1)
+    reordered_array[reordered_array != np.arange(1, len(reordered_array) + 1)] = leftovers
+    return reordered_array
+
+
+def reorder_duplicated_particles(resampling_duplication_table: np.ndarray) -> np.ndarray:
+    return np.apply_along_axis(reorder_1d_array, 1, resampling_duplication_table)
+
+
+def kitagawa_resampling(weights: np.ndarray, reorder: bool = True) -> np.ndarray:
     """Vectorized Kiatagawa resampling algorithm
     weights in the
     """
     random_generator = Generator(PCG64())
-    random_draw = random_generator.uniform(size=weights.T.shape)
+    random_draw_init = random_generator.uniform(size=(weights.T.shape[0], 1)) / weights.shape[1]
+    random_draw = random_draw_init[None, :] + np.arange(start=0, step=1 / 17, stop=1)
+    random_draw = random_draw[0]
     bin_low = np.zeros_like(random_draw)
     bin_low[:, 1:] = np.cumsum(weights.T[:, :-1], axis=1)
     bin_low = np.expand_dims(bin_low, axis=1)
     bin_high = np.expand_dims(np.cumsum(weights.T, axis=1), axis=1)
     random_draw_expanded = np.expand_dims(random_draw, axis=2)
     duplication_table = (random_draw_expanded > bin_low) * (random_draw_expanded < bin_high)
-    n_duplicated_particles = np.sum(duplication_table, axis=1)
-    return n_duplicated_particles.T  # particle to duplicate vector
+    n_duplicated_particles = np.argmax(duplication_table, axis=2) + 1
+    if reorder:
+        n_duplicated_particles = reorder_duplicated_particles(n_duplicated_particles)
+    return n_duplicated_particles  # particle to duplicate vector
 
 
 class Filter:
@@ -124,7 +141,7 @@ class PointParticleFilter(SIRParticleFilter):
 
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         alpha = np.ones_like(inv_R_trace)
-        old_n_eff = effective_weigths(old_weights)
+        old_n_eff = effective_weights(old_weights)
         degenerated_mask = old_n_eff < self.min_n_eff
 
         iterations = 1
@@ -137,15 +154,13 @@ class PointParticleFilter(SIRParticleFilter):
                 f"Iteration no. {iterations}, degenerated points {np.sum(degenerated_mask)}, alpha={np.min(alpha):.1f}, R multiplication factor= {1 / np.min(alpha):.1f}"
             )
 
-            # print(alpha[1:100])
-            # print(1 / inv_R_trace[:100])
             new_weights = point_particle_filter(
                 y=y[degenerated_mask],
                 y_hat=y_hat[:, degenerated_mask],
                 inv_R_trace=inv_R_trace[degenerated_mask] * alpha[degenerated_mask],
             )
             weights[:, degenerated_mask] = new_weights
-            n_eff[degenerated_mask] = effective_weigths(weights=new_weights)
+            n_eff[degenerated_mask] = effective_weights(weights=new_weights)
             degenerated_mask = n_eff < self.min_n_eff
             iterations += 1
             alpha[degenerated_mask] -= inflation_step
@@ -165,7 +180,7 @@ class PointParticleFilter(SIRParticleFilter):
         # plt.show()
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
-        n_eff = effective_weigths(weights=new_weights)
+        n_eff = effective_weights(weights=new_weights)
         # print(n_eff[:100] < self.min_n_eff)
         # print(np.any(n_eff < self.min_n_eff))
         if self.inflation and np.any(n_eff < self.min_n_eff):
@@ -242,6 +257,6 @@ if __name__ == "__main__":
     particle_filter = PointParticleFilter(assimilation_problem=assim_problem, inflation=True)
     logger.info("Run assimilation")
     duplicated_particles_array = particle_filter.update()
-    # print(duplicated_particles_array.T[20:25, :])
-    df = pd.DataFrame(duplicated_particles_array).T
+    print(duplicated_particles_array[1:20, :])
+    df = pd.DataFrame(duplicated_particles_array)
     df.to_csv("part_20220226.csv")
