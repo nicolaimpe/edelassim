@@ -7,6 +7,7 @@ import numpy as np
 import xarray as xr
 from matplotlib import pyplot as plt
 from numpy.random import PCG64, Generator
+from pyproj import CRS
 
 from edelassim.assimilation import AssimilationProblem, Ensemble, StateVector
 
@@ -16,6 +17,7 @@ def point_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndar
     y given in an array of shape (n_particles, n_points)
     R is supposed diagonal so we only use its trace here"""
     innovation = y - y_hat
+
     likelihood = np.exp(-1 / 2 * (innovation * inv_R_trace * innovation))
     evidence = np.sum(likelihood, axis=0)
     new_weights = likelihood / evidence
@@ -44,13 +46,11 @@ def reorder_duplicated_particles(resampling_duplication_table: np.ndarray) -> np
 
 
 def kitagawa_resampling(weights: np.ndarray, reorder: bool = True) -> np.ndarray:
-    """Vectorized Kiatagawa resampling algorithm
-    weights in the
-    """
+    """Vectorized Kiatagawa et al. 1996 resampling algorithm"""
     random_generator = Generator(PCG64())
-    random_draw_init = random_generator.uniform(size=(weights.T.shape[0], 1)) / weights.shape[1]
+    random_draw_init = random_generator.uniform(size=(weights.shape[1], 1)) / weights.shape[0]
     random_draw = random_draw_init[None, :] + np.arange(start=0, step=1 / 17, stop=1)
-    random_draw = random_draw[0]
+    random_draw = random_draw[0]  # stray dimension
     bin_low = np.zeros_like(random_draw)
     bin_low[:, 1:] = np.cumsum(weights.T[:, :-1], axis=1)
     bin_low = np.expand_dims(bin_low, axis=1)
@@ -109,8 +109,18 @@ class ParticleFilter(Filter):
         return self.resampling()
 
     def resampling(self) -> np.ndarray:
+        no_resample_mask = (
+            np.all(np.isclose(self.weights, 1 / self.assimilation_problem.ensemble.n_member, rtol=1e-5), axis=0)
+        ) + (np.all(np.isnan(self.weights), axis=0))
         algorithm_dict = {"kitagawa": kitagawa_resampling}
-        return algorithm_dict[self.resampling_algorithm](self.weights)
+        duplicated_particles = np.array(
+            [
+                np.arange(1, self.assimilation_problem.ensemble.n_member + 1)
+                for i in range(self.assimilation_problem.ensemble.n_points)
+            ]
+        )
+        duplicated_particles[~no_resample_mask] = algorithm_dict[self.resampling_algorithm](self.weights[:, ~no_resample_mask])
+        return duplicated_particles
 
 
 class SIRParticleFilter(ParticleFilter):
@@ -164,6 +174,18 @@ class PointParticleFilter(SIRParticleFilter):
             degenerated_mask = n_eff < self.min_n_eff
             iterations += 1
             alpha[degenerated_mask] -= inflation_step
+        # alpha = np.loadtxt(
+        #     "/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/grandesrousses250m/assim_viirs_local/ALPHA",
+        #     delimiter=",",
+        #     usecols=[i for i in range(14443)],
+        # )
+        new_weights = point_particle_filter(
+            y=y[degenerated_mask],
+            y_hat=y_hat[:, degenerated_mask],
+            inv_R_trace=inv_R_trace[degenerated_mask] * alpha[degenerated_mask],
+        )
+        weights[:, degenerated_mask] = new_weights
+        n_eff[degenerated_mask] = effective_weights(weights=new_weights)
         return weights, alpha
 
     def update_weights(self) -> np.ndarray:
@@ -180,14 +202,15 @@ class PointParticleFilter(SIRParticleFilter):
         # plt.show()
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
+        # df = pd.DataFrame(new_weights).T.to_csv("weights_20220226_no_inflation.csv")
         n_eff = effective_weights(weights=new_weights)
         # print(n_eff[:100] < self.min_n_eff)
         # print(np.any(n_eff < self.min_n_eff))
         if self.inflation and np.any(n_eff < self.min_n_eff):
             new_weights, alpha = self.inflate(new_weights)
-        df = pd.DataFrame(new_weights).T
-        df.to_csv("weights_20220226.csv")
-        pd.DataFrame(alpha).to_csv("alpha_20220226.csv")
+        # df = pd.DataFrame(new_weights).T
+        # df.to_csv("weights_20220226.csv")
+        # pd.DataFrame(alpha).to_csv("alpha_20220226.csv")
         self.weights = new_weights
 
 
@@ -216,11 +239,14 @@ class PointParticleFilter(SIRParticleFilter):
 
 
 if __name__ == "__main__":
+    import time
+
     import pandas as pd
 
     from edelassim.observation_operators import zaitchik
-    from edelassim.postprocess_surfex.prep import compute_all_members_snow_tickness_and_mass
+    from edelassim.postprocess_surfex.prep import compute_snow_thickness_and_mass_from_prep
 
+    t0 = time.time()
     logger = logging.getLogger("logger")
     logging.basicConfig(level=logging.INFO)
     slope_map = (
@@ -233,13 +259,19 @@ if __name__ == "__main__":
         prep_files.append(f"{folder}/PREP_220226H12_PF_ENS{i}.nc")
     observation = (xr.open_dataset(obs_filename).rename({"xx": "x", "yy": "y"}).stack(n_point=("y", "x"))).data_vars["SCF"]
     # obs_time = datetime.strptime(obs_filename.split(".")[0][-9:], "%Y%dH%H")
-    # swe_data = compute_all_members_snow_tickness_and_mass(prep_files=prep_files, slope_file=slope_map).data_vars["swe"]
+    logger.info("Reading PREPs")
+    bg_preps = xr.concat([xr.open_dataset(prep_file) for prep_file in prep_files], dim="member")
+    slope_da = xr.open_dataarray(slope_map).sel(band=1)
+
+    swe_data = (
+        bg_preps.groupby("member")
+        .map(compute_snow_thickness_and_mass_from_prep, slope_da=slope_da, crs=CRS.from_epsg(2154))
+        .data_vars["swe"]
+    )
     # swe_data.to_netcdf("swe_data.nc")
-    swe_data = xr.open_dataset("swe_data.nc").data_vars["swe"]
+    # swe_data = xr.open_dataset("swe_data.nc").data_vars["swe"]
     swe_data = swe_data.reindex(y=swe_data.coords["y"].sortby("y"), x=swe_data.coords["x"].sortby("x"))
     swe_data = swe_data.stack(n_point=("y", "x"))
-    # print(swe_data.isel(n_point=slice(1, 100)).coords["x"])
-    # print(swe_data.isel(n_point=slice(1, 100)).coords["y"])
 
     swe_ensemble = Ensemble(members=[StateVector(swe_data.sel(member=i).values) for i in range(swe_data.sizes["member"])])
     observation_operator = zaitchik
@@ -257,6 +289,40 @@ if __name__ == "__main__":
     particle_filter = PointParticleFilter(assimilation_problem=assim_problem, inflation=True)
     logger.info("Run assimilation")
     duplicated_particles_array = particle_filter.update()
-    print(duplicated_particles_array[1:20, :])
-    df = pd.DataFrame(duplicated_particles_array)
-    df.to_csv("part_20220226.csv")
+    unchanged_points_mask = np.all(duplicated_particles_array == np.arange(1, swe_ensemble.n_member + 1), axis=1)
+    idxs_analysis = np.where(~unchanged_points_mask)[0]
+    # print(duplicated_particles_array[:21])
+    # df = pd.DataFrame(duplicated_particles_array)
+    # df.to_csv("part_20220226.csv")
+    # New PREPs
+    logger.info("exporting analysis resuts creating new PREPs")
+
+    duplicated_particles_data_array = xr.DataArray(
+        (duplicated_particles_array - 1).T, dims=("member", "Number_of_points")
+    ).assign_coords({"member": bg_preps.coords["member"], "Number_of_points": bg_preps.coords["Number_of_points"]})
+
+    logger.info("Reindexing PREPs and exporting")
+    prognostic_variables = list(bg_preps.data_vars)
+    analysis_preps = bg_preps.copy()
+    import shutil
+
+    import netCDF4
+
+    for i in range(1, 18):
+        out = f"../../output_folder/SURFOUT{i}.nc"
+        shutil.copy(prep_files[i - 1], out)
+        with netCDF4.Dataset(out, "r+") as nc:
+            for dv in prognostic_variables:
+                # Only variables defined on the grid
+                if "member" and "Number_of_points" in bg_preps[dv].dims:
+                    # print(nc.variables)
+                    print(dv)
+                    nc.variables[dv].sel(Number_of_points=idxs_analysis)[:] = bg_preps[dv].sel(
+                        Number_of_points=idxs_analysis,
+                        member=duplicated_particles_data_array.sel(Number_of_points=idxs_analysis),
+                    )
+
+    t_end = time.time()
+    logger.info(
+        f"Total execution time {(t_end - t0)}",
+    )

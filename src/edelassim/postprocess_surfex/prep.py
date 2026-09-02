@@ -8,11 +8,9 @@ from pyproj import CRS
 
 
 def compute_snow_thickness_and_mass_from_prep(
-    prep_file: str, slope_file: str, crs: CRS, output_file: str | None = None
+    prep_ds: xr.Dataset, slope_da: xr.DataArray, crs: CRS, output_file: str | None = None
 ) -> float:
     # Merci Bastien
-    prep_ds = xr.open_dataset(prep_file)
-    slope_da = xr.open_dataarray(slope_file).sel(band=1)
 
     thickness_layers = []
     mass_layers = []
@@ -52,13 +50,13 @@ def compute_snow_thickness_and_mass_from_prep(
     return out_dataset
 
 
-def compute_all_members_snow_tickness_and_mass(prep_files: List[str], slope_file: str) -> xr.Dataset:
+def compute_all_members_snow_thickness_and_mass(prep_files: List[str], slope_file: str) -> xr.Dataset:
 
-    prep_an_data_list = [
-        compute_snow_thickness_and_mass_from_prep(prep_file=prep_an_file, slope_file=slope_file, crs=CRS.from_epsg(2154))
-        for prep_an_file in prep_files
+    prep_data_list = [
+        compute_snow_thickness_and_mass_from_prep(
+            prep_ds=xr.open_dataset(prep_file), slope_da=xr.open_dataarray(slope_file).sel(band=1), crs=CRS.from_epsg(2154)
+        )
+        for prep_file in prep_files
     ]
-    prep_an = xr.concat(prep_an_data_list, dim="member").reindex(
-        member=np.arange(1, len(prep_files) + 1)
-    )  # .rename("snow_depth")
-    return prep_an
+    prep = xr.concat(prep_data_list, dim="member").reindex(member=np.arange(len(prep_files)))  # .rename("snow_depth")
+    return prep
