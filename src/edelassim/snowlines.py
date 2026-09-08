@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
@@ -20,7 +18,7 @@ COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, 
 
 def create_semidistributed_bins(
     mountain_binner: MountainBinner, dem: xr.DataArray, alt_step: int = 100
-) -> Dict[str, BinGrouper]:
+) -> dict[str, BinGrouper]:
     alt_min = np.floor(dem.min() / alt_step) * alt_step - alt_step / 2
     alt_max = np.ceil(dem.max() / alt_step) * alt_step + alt_step / 2
     bins_dictionary = mountain_binner.create_user_bin_dict(

@@ -94,6 +94,7 @@ def set_polarplot(
     # ax.set_rticks([1000, 2000])
     # ax.rticks(fontsize=9)
     ax.tick_params(axis="both", labelsize="x-small")
+    ax.set_xticklabels(list(COMPASS_ROSE_DICT.keys()))
     ax.grid(True)
     ax.set_title("Snowline", va="bottom")
     ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.2))

@@ -130,7 +130,7 @@ def update_plot():
     for snowline, label, color in zip(snowline_data, labels, colors):
         if np.datetime64(current_date) in snowline.coords["time"]:
             snowline_to_plot = snowline.sel(time=current_date, slope="8 - 30")
-            if label == "Edelweiss":
+            if label in ("Edelweiss OL", "Edelweiss assim"):
                 plot_ensemble_snowline_polarplot_from_semidistributed(
                     snowline_parametrization_dataset=snowline_to_plot.sel(a=current_a),
                     dataset_type="snow_cover",
@@ -154,18 +154,18 @@ def update_plot():
         ax_s2.imshow(snow_cover_s2.sel(time=current_date), cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
         add_colorbar(ax=ax_s2)
         plot_elevation_lines(ax=ax_s2, dem=dem_20m)
-    ax_s2.set_title("Sentinel-2")
+    ax_s2.set_title("Sentinel-2 FSC [-]")
     ax_s2.set_xticks([]), ax_s2.set_yticks([])
 
     ax_viirs.imshow(snow_cover_viirs.sel(time=current_date), cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
-    ax_viirs.set_title("VIIRS")
+    ax_viirs.set_title("VIIRS FSC [-]")
     ax_viirs.set_xticks([]), ax_viirs.set_yticks([])
     add_colorbar(ax=ax_viirs)
     plot_elevation_lines(ax=ax_viirs, dem=dem_250m)
 
-    fsc_edel = dickinson(sd=snow_depth_edel.sel(time=current_date, member=current_member), a=current_a, b=0.11)
+    fsc_edel = dickinson(sd=snow_depth_edel_ol.sel(time=current_date, member=current_member), a=current_a, b=0.11)
     ax_edelweiss.imshow(fsc_edel, cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
-    ax_edelweiss.set_title("Edelweiss FSC")
+    ax_edelweiss.set_title("Edelweiss FSC [-]")
     ax_edelweiss.set_xticks([]), ax_edelweiss.set_yticks([])
     add_colorbar(ax=ax_edelweiss)
     plot_elevation_lines(ax=ax_edelweiss, dem=dem_250m)
@@ -174,7 +174,7 @@ def update_plot():
     diff_cmap = plt.get_cmap("coolwarm_r")
     diff_cmap.set_bad("gray")
     ax_diff.imshow(diff_edel_viirs, cmap=diff_cmap, vmin=-1, vmax=1)
-    ax_diff.set_title("Diff Edelweiss - VIIRS")
+    ax_diff.set_title("Diff FSC Edelweiss - VIIRS [-]")
     ax_diff.set_xticks([]), ax_diff.set_yticks([])
     add_colorbar(ax=ax_diff)
     plot_elevation_lines(ax=ax_diff, dem=dem_250m)
@@ -182,8 +182,8 @@ def update_plot():
     snow_depth_cmap = plt.get_cmap("Blues")
     snow_depth_cmap.set_under("black")
     snow_depth_cmap.set_bad("gray")
-    ax_snow_depth.imshow(snow_depth_edel.sel(time=current_date, member=current_member), cmap=snow_depth_cmap, vmin=0.001)
-    ax_snow_depth.set_title("Snow depth Edelweiss")
+    ax_snow_depth.imshow(snow_depth_edel_ol.sel(time=current_date, member=current_member), cmap=snow_depth_cmap, vmin=0.001)
+    ax_snow_depth.set_title("Snow depth Edelweiss [m]")
     ax_snow_depth.set_xticks([]), ax_snow_depth.set_yticks([])
     add_colorbar(ax=ax_snow_depth)
     plot_elevation_lines(ax=ax_snow_depth, dem=dem_250m)
@@ -192,7 +192,7 @@ def update_plot():
     precip_cmap = plt.get_cmap("viridis")
     precip_cmap.set_bad("gray")
     ax_precip.imshow(total_precip, cmap=precip_cmap)  # , vmin=0, vmax=50)
-    ax_precip.set_title("Total precipitation")
+    ax_precip.set_title("Total precipitation [mm/day]")
     ax_precip.set_xticks([]), ax_precip.set_yticks([])
     add_colorbar(ax=ax_precip)
     plot_elevation_lines(ax=ax_precip, dem=dem_250m)
@@ -201,7 +201,7 @@ def update_plot():
     phase_cmap = plt.get_cmap("Blues_r")
     phase_cmap.set_bad("gray")
     ax_phase.imshow(forcing.data_vars["phase"].sel(time=current_date, member=current_member), cmap=phase_cmap, vmin=-1, vmax=1)
-    ax_phase.set_title("Phase")
+    ax_phase.set_title("Precipitation phase [-]")
     ax_phase.set_xticks([]), ax_phase.set_yticks([])
     add_colorbar(ax=ax_phase)
     plot_elevation_lines(ax=ax_phase, dem=dem_250m)
@@ -236,9 +236,10 @@ logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
     s2_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/s2"
-    edelweiss_folder = (
+    edelweiss_ol_folder = (
         "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/grandesrousses250m/open_loop/all_members"
     )
+    edelweiss_an_folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/assim_viirs_all_clear_dates_november_2021/"
     viirs_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/meteofrance/"
     forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/grandesrousses250m/daily_forcing"
     topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/"
@@ -246,8 +247,8 @@ if __name__ == "__main__":
     glacier_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
     dem_250m_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
-    labels = ("Sentinel-2", "Edelweiss", "VIIRS")
-    colors = ("black", "blue", "red")
+    labels = ("Sentinel-2", "Edelweiss OL", "Edelweiss assim", "VIIRS")
+    colors = ("black", "blue", "purple", "red")
 
     # Initial date
     current_date = datetime(2021, 11, 1)
@@ -273,13 +274,14 @@ if __name__ == "__main__":
     forcing = xr.open_mfdataset(f"{forcing_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
 
     snowline_s2 = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc")
-    snowline_edel = xr.open_dataset(f"{edelweiss_folder}/snowline_paremetrization.nc")
+    snowline_ol_edel = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_paremetrization.nc")
+    snowline_an_edel = xr.open_dataset(f"{edelweiss_an_folder}/snowline_paremetrization.nc")
     snowline_viirs = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc")
-    snowline_data = (snowline_s2, snowline_edel, snowline_viirs)
+    snowline_data = (snowline_s2, snowline_ol_edel, snowline_an_edel, snowline_viirs)
 
     snow_rain_forcing = xr.open_dataset(f"{forcing_folder}/snowline_parametrization.nc")
-    snow_depth_edel = (
-        xr.open_dataset(f"{edelweiss_folder}/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc")
+    snow_depth_edel_ol = (
+        xr.open_dataset(f"{edelweiss_ol_folder}/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc")
         .data_vars["DSN_T_ISBA"]
         .sortby("y", ascending=False)
         .where(1 - mask)
@@ -302,12 +304,12 @@ if __name__ == "__main__":
     good_dates_viirs = [date.astype("M8[ms]").astype("O") for date in good_dates_viirs]
 
     # Slider for observation operator
-    a_values = snowline_edel.coords["a"].values  # or from your DataArray
+    a_values = snowline_ol_edel.coords["a"].values  # or from your DataArray
     # Initial value for observation operator parametrization
     current_a = a_values[0]
 
     # Slider for member
-    member_values = snowline_edel.coords["member"].values  # or from your DataArray
+    member_values = snowline_ol_edel.coords["member"].values  # or from your DataArray
     # Initial value for observation operator parametrization
     current_member = member_values[0]
 
@@ -393,4 +395,5 @@ if __name__ == "__main__":
     update_plot()
 
     # plt.tight_layout()
+    fig.subplots_adjust(hspace=1e-4, wspace=1e-4)
     plt.show()

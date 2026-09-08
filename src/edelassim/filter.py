@@ -15,10 +15,23 @@ from edelassim.assimilation import AssimilationProblem, Ensemble, StateVector
 def point_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndarray) -> np.ndarray:
     """Vectorized particle filtering separate for each point
     y given in an array of shape (n_particles, n_points)
-    R is supposed diagonal so we only use its trace here"""
+    R is supposed diagonal so we only use its trace here (n_points,)"""
     innovation = y - y_hat
-
     likelihood = np.exp(-1 / 2 * (innovation * inv_R_trace * innovation))
+    evidence = np.sum(likelihood, axis=0)
+    new_weights = likelihood / evidence
+    return new_weights
+
+
+def local_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndarray, c: np.ndarray) -> np.ndarray:
+    """Vectorized local particle filtering
+    y given in an array of shape (n_particles, n_grid_points)
+    c is the decay of correlation operator array of shape (n_grid_points, n_correlated_points)
+    R is supposed diagonal so we only use its trace here (n_points,)"""
+    innovation = y - y_hat
+    increment = innovation * inv_R_trace * innovation
+    increment = np.expand_dims(increment, axis=2)
+    likelihood = np.exp(-1 / 2 * (np.sum(c * increment, axis=2)))
     evidence = np.sum(likelihood, axis=0)
     new_weights = likelihood / evidence
     return new_weights
@@ -301,9 +314,36 @@ if __name__ == "__main__":
         (duplicated_particles_array - 1).T, dims=("member", "Number_of_points")
     ).assign_coords({"member": bg_preps.coords["member"], "Number_of_points": bg_preps.coords["Number_of_points"]})
 
-    logger.info("Reindexing PREPs and exporting")
+    # 2. Slice to the analysis points only
+    indexer_sub = duplicated_particles_data_array.sel(Number_of_points=idxs_analysis)
+
+    ###########""
+    # Simpler fancy reindexing if needed
+
+    # .sel(Number_of_points=idxs_analysis)[:] = bg_preps[dv].sel(
+    #                     Number_of_points=idxs_analysis,
+    #                     member=duplicated_particles_data_array.sel(Number_of_points=idxs_analysis),
+    #                 )
+    ##############
+
+    logger.info("Reindexing PREPs")
+    # 3. Reindex: only prognostic variables, only analysis points
+    logger.info("Reindexing prognostic variables")
+    analysis_preps = bg_preps.copy(deep=False)  # shallow copy; non-prog vars are views
+
     prognostic_variables = list(bg_preps.data_vars)
-    analysis_preps = bg_preps.copy()
+
+    for dv in prognostic_variables:
+        if "member" and "Number_of_points" in bg_preps[dv].dims:
+            # Copy this variable (so we don't modify bg_preps)
+            analysis_preps[dv] = analysis_preps[dv].copy()
+            # Pointwise reindex only the analysis points
+            analysis_preps[dv].loc[{"Number_of_points": idxs_analysis}] = bg_preps[dv].sel(
+                Number_of_points=idxs_analysis,
+                member=indexer_sub,
+            )
+
+    logger.info("Exporting")
     import shutil
 
     import netCDF4
@@ -316,11 +356,7 @@ if __name__ == "__main__":
                 # Only variables defined on the grid
                 if "member" and "Number_of_points" in bg_preps[dv].dims:
                     # print(nc.variables)
-                    print(dv)
-                    nc.variables[dv].sel(Number_of_points=idxs_analysis)[:] = bg_preps[dv].sel(
-                        Number_of_points=idxs_analysis,
-                        member=duplicated_particles_data_array.sel(Number_of_points=idxs_analysis),
-                    )
+                    nc.variables[dv][:] = analysis_preps[dv].sel(member=i - 1).values
 
     t_end = time.time()
     logger.info(
