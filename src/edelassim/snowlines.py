@@ -4,15 +4,8 @@ from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerC
 from ndsi_fsc_calibration.snow_cover_products import S2_CLASSES
 from xarray.groupers import BinGrouper
 
-# We define Météo-France class encoding via a dictio
-METEOFRANCE_CLASSES = {
-    "snow_cover": range(1, 201),
-    "no_snow": (0,),
-    "clouds": (255,),
-    "water": (220,),
-    "nodata": (230,),
-    "fill": (254,),
-}
+from edelassim.observations import METEOFRANCE_CLASSES
+
 COMPASS_ROSE_DICT = {"N": 0, "NE": 45, "E": 90, "SE": 135, "S": 180, "SW": 225, "W": 270, "NW": 315}
 
 
@@ -51,19 +44,6 @@ def reduce_fsc_to_pixel_counts(fsc_and_auxiliary: xr.Dataset) -> xr.Dataset:
             "total_valid": snow_cover_fraction.count(dim=("x", "y")),
         }
     )
-
-
-def valid_snow_cover_fraction_viirs_mf(viirs_mf_data: xr.DataArray) -> xr.DataArray:
-    # satellite_fsc_data = viirs_mf_data.where(viirs_mf_data != METEOFRANCE_CLASSES["water"], 0)
-    valid_data_mask = viirs_mf_data < METEOFRANCE_CLASSES["water"]
-    valid_snow_cover_fraction = viirs_mf_data.where(valid_data_mask) / METEOFRANCE_CLASSES["snow_cover"][-1]
-    return valid_snow_cover_fraction
-
-
-def valid_snow_cover_fraction_s2(sentinel2_fsc_data: xr.DataArray):
-    valid_data_mask = sentinel2_fsc_data < S2_CLASSES["clouds"]
-    valid_snow_cover_fraction = sentinel2_fsc_data.where(valid_data_mask) / S2_CLASSES["snow_cover"][-1]
-    return valid_snow_cover_fraction
 
 
 def sum_all_values_below(data_array: xr.DataArray, dim: str, coord: str) -> xr.DataArray:
@@ -159,6 +139,27 @@ def find_snowline_from_snow_penalization(snowline_parametrization_dataset: xr.Da
     # Recover the center of altitude bins used for snowline calculation
     snowline = snowline + altitude_step // 2
     return snowline
+
+
+def compute_forcing_snowline_parametrization(forcing_distributed: xr.DataArray, mountain_binner_config: MountainBinnerConfig):
+    """For each distributed bin we compute the mean of forcing fields.
+
+    Args:
+        forcing_distributed (xr.DataArray): _description_
+        mountain_binner_config (MountainBinnerConfig): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    mountain_binner = MountainBinner(mountain_binner_config)
+    bin_dictionary = create_semidistributed_bins(
+        mountain_binner=mountain_binner, dem=xr.open_dataarray(mountain_binner_config.dem_path), alt_step=100
+    )
+
+    transformed = mountain_binner.prepare(distributed_data=forcing_distributed, bin_dict=bin_dictionary).mean()
+    transformed = transformed.drop_vars(("slope", "aspect", "altitude"))
+    transformed = mountain_binner.rename_coords(transformed)
+    return transformed
 
 
 def find_forcing_snowrain_line(phase_dataset: xr.Dataset) -> xr.DataArray:

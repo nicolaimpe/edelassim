@@ -37,11 +37,12 @@ def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> x
     return all_edel
 
 
-def append_average_member_value(snow_depth_edel: xr.DataArray) -> xr.DataArray:
+def append_average_member_value(data: xr.DataArray) -> xr.DataArray:
 
-    snow_depth_edel_average = snow_depth_edel.mean(dim="member")
-    snow_depth_edel_average = snow_depth_edel_average.assign_coords(member=[-1])
-    out = xr.concat([snow_depth_edel_average, snow_depth_edel], dim="member")
+    data_avg = data.mean(dim="member")
+    data_avg = data_avg.expand_dims(dim="member")
+    data_avg = data_avg.assign_coords(member=[-1])
+    out = xr.concat([data_avg, data], dim="member")
     return out
 
 

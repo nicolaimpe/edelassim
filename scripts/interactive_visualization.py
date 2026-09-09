@@ -6,17 +6,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from geospatial_grid.georeferencing import georef_netcdf_rioxarray
-from matplotlib.widgets import Button, Slider
+from matplotlib.widgets import Button
 from pyproj import CRS
 
 from edelassim.observation_operators import dickinson
-from edelassim.snowlines import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
+from edelassim.observations import (
+    find_clear_dates_s2,
+    find_clear_dates_viirs,
+    valid_snow_cover_fraction_s2,
+    valid_snow_cover_fraction_viirs_mf,
+)
 from edelassim.visualization import (
     FSC_CMAP_SNOW_COVER,
-    METEOFRANCE_NEW_CLASSES,
-    S2_CLASSES,
-    add_colorbar,
-    plot_elevation_lines,
+    add_2d_plot,
     plot_ensemble_snowline_polarplot_from_semidistributed,
     plot_snowline_polarplot_from_semidistributed,
 )
@@ -119,7 +121,7 @@ def change_mb(delta):
     current_mb_idx = list(member_values).index(current_member)
     current_mb_idx += delta
     current_member = member_values[current_mb_idx]
-    mb_text.set_text(f"member = {current_member}")
+    mb_text.set_text(f"member = {'avg.' if current_member == -1 else current_member}")
     update_plot()
 
 
@@ -149,62 +151,41 @@ def update_plot():
             color=color,
         )
 
-    FSC_CMAP_SNOW_COVER.set_bad("gray")
+    s2_title = "Sentinel-2 FSC [-]"
     if np.datetime64(current_date) in snow_cover_s2.coords["time"]:
-        ax_s2.imshow(snow_cover_s2.sel(time=current_date), cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
-        add_colorbar(ax=ax_s2)
-        plot_elevation_lines(ax=ax_s2, dem=dem_20m)
-    ax_s2.set_title("Sentinel-2 FSC [-]")
-    ax_s2.set_xticks([]), ax_s2.set_yticks([])
+        s2_data = snow_cover_s2.sel(time=current_date)
+        add_2d_plot(s2_data, ax_s2, dem_20m, title=s2_title, cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
+    else:
+        ax_s2.set_title(s2_title)
+        ax_s2.set_xticks([]), ax_s2.set_yticks([])
 
-    ax_viirs.imshow(snow_cover_viirs.sel(time=current_date), cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
-    ax_viirs.set_title("VIIRS FSC [-]")
-    ax_viirs.set_xticks([]), ax_viirs.set_yticks([])
-    add_colorbar(ax=ax_viirs)
-    plot_elevation_lines(ax=ax_viirs, dem=dem_250m)
+    viirs_data = snow_cover_viirs.sel(time=current_date)
+    add_2d_plot(viirs_data, ax_viirs, dem_250m, "VIIRS FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
 
     fsc_edel = dickinson(sd=snow_depth_edel_ol.sel(time=current_date, member=current_member), a=current_a, b=0.11)
-    ax_edelweiss.imshow(fsc_edel, cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
-    ax_edelweiss.set_title("Edelweiss FSC [-]")
-    ax_edelweiss.set_xticks([]), ax_edelweiss.set_yticks([])
-    add_colorbar(ax=ax_edelweiss)
-    plot_elevation_lines(ax=ax_edelweiss, dem=dem_250m)
+    add_2d_plot(fsc_edel, ax_edelweiss, dem_250m, "Edelweiss FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
 
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
     diff_cmap = plt.get_cmap("coolwarm_r")
     diff_cmap.set_bad("gray")
-    ax_diff.imshow(diff_edel_viirs, cmap=diff_cmap, vmin=-1, vmax=1)
-    ax_diff.set_title("Diff FSC Edelweiss - VIIRS [-]")
-    ax_diff.set_xticks([]), ax_diff.set_yticks([])
-    add_colorbar(ax=ax_diff)
-    plot_elevation_lines(ax=ax_diff, dem=dem_250m)
+    add_2d_plot(diff_edel_viirs, ax_diff, dem_250m, "Diff FSC Edelweiss - VIIRS [-]", cmap=diff_cmap, vmin=-1, vmax=1)
 
     snow_depth_cmap = plt.get_cmap("Blues")
     snow_depth_cmap.set_under("black")
     snow_depth_cmap.set_bad("gray")
-    ax_snow_depth.imshow(snow_depth_edel_ol.sel(time=current_date, member=current_member), cmap=snow_depth_cmap, vmin=0.001)
-    ax_snow_depth.set_title("Snow depth Edelweiss [m]")
-    ax_snow_depth.set_xticks([]), ax_snow_depth.set_yticks([])
-    add_colorbar(ax=ax_snow_depth)
-    plot_elevation_lines(ax=ax_snow_depth, dem=dem_250m)
+    sd_data = snow_depth_edel_ol.sel(time=current_date, member=current_member)
+    add_2d_plot(sd_data, ax_snow_depth, dem_250m, "Snow depth Edelweiss [m]", cmap=snow_depth_cmap, vmin=0.001, vmax=2.5)
 
+    ######### FORCING ###########
     total_precip = forcing.data_vars["precip_total"].sel(time=current_date, member=current_member)
     precip_cmap = plt.get_cmap("viridis")
     precip_cmap.set_bad("gray")
-    ax_precip.imshow(total_precip, cmap=precip_cmap)  # , vmin=0, vmax=50)
-    ax_precip.set_title("Total precipitation [mm/day]")
-    ax_precip.set_xticks([]), ax_precip.set_yticks([])
-    add_colorbar(ax=ax_precip)
-    plot_elevation_lines(ax=ax_precip, dem=dem_250m)
+    add_2d_plot(total_precip, ax_precip, dem_250m, "Total precipitation [mm/day]", cmap=precip_cmap)
 
-    ######### FORCING ###########
     phase_cmap = plt.get_cmap("Blues_r")
     phase_cmap.set_bad("gray")
-    ax_phase.imshow(forcing.data_vars["phase"].sel(time=current_date, member=current_member), cmap=phase_cmap, vmin=-1, vmax=1)
-    ax_phase.set_title("Precipitation phase [-]")
-    ax_phase.set_xticks([]), ax_phase.set_yticks([])
-    add_colorbar(ax=ax_phase)
-    plot_elevation_lines(ax=ax_phase, dem=dem_250m)
+    phase_data = forcing.data_vars["phase"].sel(time=current_date, member=current_member)
+    add_2d_plot(phase_data, ax_phase, dem_250m, "Precipitation phase [-]", cmap=phase_cmap, vmin=-1, vmax=1)
 
     try:
         if not np.all(np.isnan(snow_rain_forcing.sel(time=current_date, slope_bins="8 - 30").data_vars["phase"])):
@@ -212,18 +193,35 @@ def update_plot():
                 snowline_parametrization_dataset=snow_rain_forcing.sel(time=current_date, slope_bins="8 - 30"),
                 ax=ax_snow_rain_line,
                 dataset_type="forcing",
+                color="blue",
             )
             current_phase_line = snow_rain_forcing.sel(time=current_date, member=current_member, slope_bins="8 - 30")
             plot_snowline_polarplot_from_semidistributed(
                 snowline_parametrization_dataset=current_phase_line,
                 ax=ax_snow_rain_line,
                 dataset_type="forcing",
+                color="blue",
+                label="Edelweiss OL",
+            )
+            plot_ensemble_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=snow_rain_forcing_analysis.sel(time=current_date, slope_bins="8 - 30"),
+                ax=ax_snow_rain_line,
+                dataset_type="forcing",
+                color="purple",
+            )
+            current_phase_line = snow_rain_forcing_analysis.sel(time=current_date, member=current_member, slope_bins="8 - 30")
+            plot_snowline_polarplot_from_semidistributed(
+                snowline_parametrization_dataset=current_phase_line,
+                ax=ax_snow_rain_line,
+                dataset_type="forcing",
+                color="purple",
+                label="Edelweiss assim",
             )
             ax_snow_rain_line.set_title("Forcing snow-rain line")
         else:
-            logging.info(f"no phase on day {current_date}")
+            logger.info(f"no phase on day {current_date}")
     except ValueError as e:
-        logging.info(f"Exception caught {e}")
+        logger.info(f"Exception caught {e}")
 
     date_text.set_text(str(current_date.date()))
     # Do not remove ticks for the snowline plot
@@ -235,106 +233,31 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    s2_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/s2"
-    edelweiss_ol_folder = (
-        "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/grandesrousses250m/open_loop/all_members"
-    )
-    edelweiss_an_folder = "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/assim_viirs_all_clear_dates_november_2021/"
-    viirs_folder = "/home/imperatoren/work/edelweiss_assimilation/observations/grandesrousses250m/meteofrance/"
-    forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/grandesrousses250m/daily_forcing"
-    topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/"
-    forest_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/forest_mask/forest_mask_corine_grandesrousses_max.nc"
-    glacier_mask_path = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
+    working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
+    observation_folder = f"{working_folder}/observations/grandesrousses250m"
+    simulation_folder = f"{working_folder}/simulations/postprocess"
+    s2_folder = f"{observation_folder}/s2"
+    edelweiss_ol_folder = f"{simulation_folder}/grandesrousses250m/open_loop/"
+    edelweiss_an_folder = f"{simulation_folder}/reanalysis/assim_viirs_all_clear_dates_november_2021/"
+    viirs_folder = f"{observation_folder}/meteofrance/"
+    forcing_folder = f"{working_folder}/forcing/grandesrousses250m/open_loop"
+    forcing_analysis_folder = f"{working_folder}/forcing/reanalysis/assim_viirs_all_clear_dates_november_2021/"
+
+    topography_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/topography/"
+    landcover_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/"
+    forest_mask_path = f"{landcover_folder}/forest_mask/forest_mask_corine_grandesrousses_max.nc"
+    glacier_mask_path = f"{landcover_folder}/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
     dem_250m_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
     labels = ("Sentinel-2", "Edelweiss OL", "Edelweiss assim", "VIIRS")
     colors = ("black", "blue", "purple", "red")
 
+    # Create figure and polar axes
+    fig = plt.figure(figsize=(20, 10))
     # Initial date
     current_date = datetime(2021, 11, 1)
 
-    ########################### Visualization ##########################################################
-    logger.info("Plotting")
-
-    glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
-    forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
-    mask = glacier_mask + forest_mask
-    mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
-    snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
-    mask_20m = mask.rio.reproject_match(snow_cover_s2)
-    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m))
-
-    dem_250m = xr.open_dataarray(dem_250m_filepath).sel(band=1)
-    dem_20m = xr.open_dataarray(dem_20m_filepath).sel(band=1)
-
-    snow_cover_viirs = valid_snow_cover_fraction_viirs_mf(
-        xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
-    )
-
-    forcing = xr.open_mfdataset(f"{forcing_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
-
-    snowline_s2 = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc")
-    snowline_ol_edel = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_paremetrization.nc")
-    snowline_an_edel = xr.open_dataset(f"{edelweiss_an_folder}/snowline_paremetrization.nc")
-    snowline_viirs = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc")
-    snowline_data = (snowline_s2, snowline_ol_edel, snowline_an_edel, snowline_viirs)
-
-    snow_rain_forcing = xr.open_dataset(f"{forcing_folder}/snowline_parametrization.nc")
-    snow_depth_edel_ol = (
-        xr.open_dataset(f"{edelweiss_ol_folder}/pro/PRO_GrandesRousses250m_2021080206_2022080106.nc")
-        .data_vars["DSN_T_ISBA"]
-        .sortby("y", ascending=False)
-        .where(1 - mask)
-    )
-
-    # Determine which days are clear for observations
-    n_pixels_area = snow_cover_s2.sizes["x"] * snow_cover_s2.sizes["y"]
-    n_data_pixel = snow_cover_s2.count(dim=("x", "y"))
-    cloud_mask_s2 = snow_cover_s2 >= S2_CLASSES["clouds"][0]
-    # Quick criterium to determine whether a Sentinel-2 image is exploitable
-    cloud_flag_s2 = (cloud_mask_s2.sum(dim=("x", "y")) / n_data_pixel > 0.8) | (n_data_pixel / n_pixels_area < 0.3)
-    good_dates_s2 = cloud_flag_s2.where(cloud_flag_s2 == 0, drop=True).time.values
-    good_dates_s2 = [date.astype("M8[ms]").astype("O") for date in good_dates_s2]
-
-    n_data_pixel = snow_cover_viirs.count(dim=("x", "y"))
-
-    # cloud_mask_viirs = np.isnan(snow_cover_viirs)
-    cloud_flag_viirs = (n_data_pixel / (snow_cover_viirs.sizes["x"] * snow_cover_viirs.sizes["y"])) < 0.50
-    good_dates_viirs = cloud_flag_viirs.where(cloud_flag_viirs == 0, drop=True).time.values
-    good_dates_viirs = [date.astype("M8[ms]").astype("O") for date in good_dates_viirs]
-
-    # Slider for observation operator
-    a_values = snowline_ol_edel.coords["a"].values  # or from your DataArray
-    # Initial value for observation operator parametrization
-    current_a = a_values[0]
-
-    # Slider for member
-    member_values = snowline_ol_edel.coords["member"].values  # or from your DataArray
-    # Initial value for observation operator parametrization
-    current_member = member_values[0]
-
-    # Create figure and polar axes
-    fig = plt.figure(figsize=(20, 10))
-
-    ax_s2 = fig.add_subplot(3, 4, 1)
-    ax_edelweiss = fig.add_subplot(3, 4, 2)
-    ax_viirs = fig.add_subplot(3, 4, 3)
-    ax_diff = fig.add_subplot(3, 4, 4)
-    ax_snow_depth = fig.add_subplot(3, 4, 6)
-    ax_precip = fig.add_subplot(3, 4, 7)
-    ax_phase = fig.add_subplot(3, 4, 8)
-    ax_snowlines = fig.add_subplot(3, 4, 11, projection="polar")
-    ax_snow_rain_line = fig.add_subplot(3, 4, 12, projection="polar")
-    # ax_temperature = fig.add_subplot(258)
-    axs_snow_cover = [ax_s2, ax_edelweiss, ax_viirs]
-    axs_all = [*axs_snow_cover, ax_diff, ax_precip, ax_snowlines, ax_snow_depth, ax_precip, ax_phase, ax_snow_rain_line]
-    # fig, axs = plt.subplots(1, 2, figsize=(5, 8), subplot_kw={"projection": "polar"}, layout="constrained")
-    # fig.subplots_adjust(bottom=0.35)  # Room for buttons
-    date_text = fig.suptitle(str(current_date.date()), y=0.98)
-    a_text = fig.text(s=f"a = {current_a}", y=0.32, x=0.37)
-    mb_text = fig.text(s=f"member = {current_member}", y=0.25, x=0.37)
-
-    # Create button axes
+    ##################### Create button axes
     button_width = 0.07
     button_height = 0.025
     button_y1 = 0.12
@@ -384,16 +307,72 @@ if __name__ == "__main__":
     btn_mb_minus.on_clicked(lambda e: change_mb(-1))
     btn_mb_plus.on_clicked(lambda e: change_mb(1))
 
+    ########################### Read data ##########################################################
+
+    logger.info("Reading data")
+    glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
+    forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
+    mask = glacier_mask + forest_mask
+    mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
+    snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
+    mask_20m = mask.rio.reproject_match(snow_cover_s2)
+    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m))
+
+    dem_250m = xr.open_dataarray(dem_250m_filepath).sel(band=1)
+    dem_20m = xr.open_dataarray(dem_20m_filepath).sel(band=1)
+
+    snow_cover_viirs = valid_snow_cover_fraction_viirs_mf(
+        xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
+    )
+
+    forcing = xr.open_mfdataset(f"{forcing_analysis_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
+
+    snowline_s2 = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc")
+    snowline_ol_edel = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_paremetrization.nc")
+    snowline_an_edel = xr.open_dataset(f"{edelweiss_an_folder}/snowline_paremetrization.nc")
+    snowline_viirs = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc")
+    snowline_data = (snowline_s2, snowline_ol_edel, snowline_an_edel, snowline_viirs)
+
+    snow_rain_forcing = xr.open_dataset(f"{forcing_folder}/snowline_parametrization.nc")
+    snow_rain_forcing_analysis = xr.open_dataset(f"{forcing_analysis_folder}/snowline_parametrization.nc")
+    snow_depth_edel_ol = xr.open_dataset(f"{edelweiss_an_folder}/spatial.nc")
+    snow_depth_edel_ol = snow_depth_edel_ol.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
+
+    good_dates_s2 = find_clear_dates_s2(snow_cover_s2=snow_cover_s2)
+    good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
+
+    # Slider for observation operator values
+    a_values = snowline_ol_edel.coords["a"].values  # or from your DataArray
+    # Initial value for observation operator parametrization
+    current_a = a_values[0]
+
+    # Slider for member values
+    member_values = snowline_ol_edel.coords["member"].values  # or from your DataArray
+    # Initial value for observation operator parametrization
+    current_member = member_values[0]
+
+    logger.info("Plotting")
+    ax_s2 = fig.add_subplot(3, 4, 1)
+    ax_edelweiss = fig.add_subplot(3, 4, 2)
+    ax_viirs = fig.add_subplot(3, 4, 3)
+    ax_diff = fig.add_subplot(3, 4, 4)
+    ax_snow_depth = fig.add_subplot(3, 4, 6)
+    ax_precip = fig.add_subplot(3, 4, 7)
+    ax_phase = fig.add_subplot(3, 4, 8)
+    ax_snowlines = fig.add_subplot(3, 4, 11, projection="polar")
+    ax_snow_rain_line = fig.add_subplot(3, 4, 12, projection="polar")
+    # ax_temperature = fig.add_subplot(258)
+    axs_snow_cover = [ax_s2, ax_edelweiss, ax_viirs]
+    axs_all = [*axs_snow_cover, ax_diff, ax_precip, ax_snowlines, ax_snow_depth, ax_precip, ax_phase, ax_snow_rain_line]
+    # fig, axs = plt.subplots(1, 2, figsize=(5, 8), subplot_kw={"projection": "polar"}, layout="constrained")
+    # fig.subplots_adjust(bottom=0.35)  # Room for buttons
+    date_text = fig.suptitle(str(current_date.date()), y=0.98)
+    a_text = fig.text(s=f"a = {current_a}", y=0.32, x=0.37)
+    mb_text = fig.text(s=f"member = {'avg.' if current_member == -1 else current_member}", y=0.25, x=0.37)
+
     # Initial plot
-    fig.subplots_adjust(bottom=0.05)
-    fig.subplots_adjust(top=0.96)
-    fig.subplots_adjust(left=0.05)
-    fig.subplots_adjust(right=0.96)
-    fig.subplots_adjust(wspace=0.1)
-    fig.subplots_adjust(hspace=0.1)
-
+    fig.subplots_adjust(bottom=0.05, top=0.96, left=0.05, hspace=1e-4, right=0.96, wspace=1e-4)
     update_plot()
-
     # plt.tight_layout()
-    fig.subplots_adjust(hspace=1e-4, wspace=1e-4)
+
     plt.show()
