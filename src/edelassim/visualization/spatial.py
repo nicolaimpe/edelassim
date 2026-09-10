@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -17,6 +18,19 @@ fsc_color_def_snow_cover = [
 
 FSC_CMAP_SNOW_COVER = LinearSegmentedColormap.from_list("custom_cmap", fsc_color_def_snow_cover, N=256)
 FSC_CMAP_SNOW_COVER.set_bad("gray")
+
+SNOW_DEPTH_CMAP = plt.get_cmap("Blues")
+SNOW_DEPTH_CMAP.set_under("black")
+SNOW_DEPTH_CMAP.set_bad("gray")
+
+FIELD_DIFF_CMAP = plt.get_cmap("coolwarm_r")
+FIELD_DIFF_CMAP.set_bad("gray")
+
+PRECIP_CMAP = plt.get_cmap("viridis")
+PRECIP_CMAP.set_bad("gray")
+
+PHASE_CMAP = plt.get_cmap("Blues_r")
+PHASE_CMAP.set_bad("gray")
 
 
 def add_colorbar(ax, **kwargs):

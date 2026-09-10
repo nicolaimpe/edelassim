@@ -1,14 +1,14 @@
-# Create figure and polar axes
+# Create fig.add_ure and polar axes
 from datetime import timedelta
 
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 from matplotlib.widgets import Button
 
 
 class InteractiveSeasonExploreButtons:
-    def __init__(self):
+    def __init__(self, fig: Figure):
 
-        plt.figure(figsize=(8, 2))
         ##################### Create button axes
         button_width = 0.15
         button_height = 0.1
@@ -18,19 +18,19 @@ class InteractiveSeasonExploreButtons:
         button_y4 = 0.8
         button_x1 = 0.2
 
-        ax_d_minus = plt.axes([button_x1 + button_width, button_y1, button_width, button_height])
-        ax_d_plus = plt.axes([button_x1 + 2 * button_width, button_y1, button_width, button_height])
-        ax_m_minus = plt.axes([button_x1, button_y1, button_width, button_height])
-        ax_m_plus = plt.axes([button_x1 + 3 * button_width, button_y1, button_width, button_height])
-        ax_next_good_viirs = plt.axes([button_x1 + 2 * button_width, button_y2, button_width, button_height])
-        ax_prev_good_viirs = plt.axes([button_x1 + button_width, button_y2, button_width, button_height])
-        ax_next_good_s2 = plt.axes([button_x1 + 3 * button_width, button_y2, button_width, button_height])
-        ax_prev_good_s2 = plt.axes([button_x1, button_y2, button_width, button_height])
+        ax_d_minus = fig.add_axes([button_x1 + button_width, button_y1, button_width, button_height])
+        ax_d_plus = fig.add_axes([button_x1 + 2 * button_width, button_y1, button_width, button_height])
+        ax_m_minus = fig.add_axes([button_x1, button_y1, button_width, button_height])
+        ax_m_plus = fig.add_axes([button_x1 + 3 * button_width, button_y1, button_width, button_height])
+        ax_next_good_viirs = fig.add_axes([button_x1 + 2 * button_width, button_y2, button_width, button_height])
+        ax_prev_good_viirs = fig.add_axes([button_x1 + button_width, button_y2, button_width, button_height])
+        ax_next_good_s2 = fig.add_axes([button_x1 + 3 * button_width, button_y2, button_width, button_height])
+        ax_prev_good_s2 = fig.add_axes([button_x1, button_y2, button_width, button_height])
 
-        ax_a_minus = plt.axes([button_x1 + button_width, button_y3, button_width, button_height])
-        ax_a_plus = plt.axes([button_x1 + 2 * button_width, button_y3, button_width, button_height])
-        ax_mb_minus = plt.axes([button_x1 + button_width, button_y4, button_width, button_height])
-        ax_mb_plus = plt.axes([button_x1 + 2 * button_width, button_y4, button_width, button_height])
+        ax_a_minus = fig.add_axes([button_x1 + button_width, button_y3, button_width, button_height])
+        ax_a_plus = fig.add_axes([button_x1 + 2 * button_width, button_y3, button_width, button_height])
+        ax_mb_minus = fig.add_axes([button_x1 + button_width, button_y4, button_width, button_height])
+        ax_mb_plus = fig.add_axes([button_x1 + 2 * button_width, button_y4, button_width, button_height])
 
         self.btn_d_minus = Button(ax_d_minus, "D-")
         self.btn_d_plus = Button(ax_d_plus, "D+")

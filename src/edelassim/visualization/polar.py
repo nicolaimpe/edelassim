@@ -29,6 +29,25 @@ def set_polarplot(
     return ax
 
 
+def plot_envelop_member_snowline(snowline_ds: xr.Dataset, member: int, label: str, color: str, **plot_kwargs):
+    snowline_ensemble = find_snowline_from_snow_penalization(snowline_ds)
+    plot_polar_envelop_member(snowline_ensemble, member, color=color, label=label, **plot_kwargs)
+
+
+def plot_envelop_member_snow_rain(phase_ds: xr.Dataset, member: int, label: str, color: str, **plot_kwargs):
+    snowline_ensemble = find_forcing_snowrain_line(phase_ds)
+    plot_polar_envelop_member(snowline_ensemble, member, color=color, label=label, **plot_kwargs)
+
+
+def plot_polar_envelop_member(ensemble_polar_data: xr.Dataset, member: int, color: str, label: str, **plot_kwargs):
+    p_low, p_high = 10, 90
+    lower_sl = ensemble_polar_data.quantile(q=p_low / 100, dim="member")
+    upper_sl = ensemble_polar_data.quantile(q=p_high / 100, dim="member")
+    plot_ensemble_snowline_polarplot(upper_sl, lower_sl, color=color, **plot_kwargs)
+    member_sl = ensemble_polar_data.sel(member=member)
+    plot_snowline_polarplot(member_sl, label=label, color=color, **plot_kwargs)
+
+
 def plot_snowline_polarplot(
     snowline_per_aspects: np.ndarray,
     ax: Axes,
@@ -66,64 +85,3 @@ def plot_ensemble_snowline_polarplot(
     r_lower = [*r_lower, r_lower[0]]
     ax.fill_between(theta, r_lower, r_upper, label=label, color=color, alpha=0.5)
     return ax
-
-
-def plot_snowline_polarplot_from_semidistributed(
-    snowline_parametrization_dataset: xr.Dataset,
-    dataset_type: str,
-    ax: Axes,
-    label: str | None = None,
-    color: str | None = None,
-):
-    if dataset_type == "snow_cover":
-        snowline = find_snowline_from_snow_penalization(snowline_parametrization_dataset)
-    elif dataset_type == "forcing":
-        snowline = find_forcing_snowrain_line(snowline_parametrization_dataset)
-    else:
-        raise ValueError("Unknown dataset_type argument. Valid choices are 'snow_cover' and 'forcing'")
-    # print(snowline.values)
-    alt_max = snowline_parametrization_dataset.coords["altitude_max"].max()
-    alt_min = snowline_parametrization_dataset.coords["altitude_max"].min()
-
-    return plot_snowline_polarplot(
-        snowline_per_aspects=snowline,
-        alt_max=alt_max,
-        alt_min=alt_min,
-        ax=ax,
-        label=label,
-        color=color,
-    )
-
-
-def plot_ensemble_snowline_polarplot_from_semidistributed(
-    snowline_parametrization_dataset: xr.Dataset,
-    dataset_type: str,
-    ax: Axes,
-    label: str | None = None,
-    color: str | None = None,
-    p_low: int = 10,
-    p_high: int = 90,
-):
-
-    if dataset_type == "snow_cover":
-        snowline = find_snowline_from_snow_penalization(snowline_parametrization_dataset)
-        snowline_lower = snowline.quantile(q=p_low / 100, dim="member")
-        snowline_upper = snowline.quantile(q=p_high / 100, dim="member")
-    elif dataset_type == "forcing":
-        snowline = find_forcing_snowrain_line(snowline_parametrization_dataset)
-        snowline_lower = snowline.quantile(q=p_low / 100, dim="member")
-        snowline_upper = snowline.quantile(q=p_high / 100, dim="member")
-    else:
-        raise ValueError("Unknown dataset_type argument. Valid choices are 'snow_cover' and 'forcing'")
-    # print(snowline.values)
-    alt_max = snowline_parametrization_dataset.coords["altitude_max"].max()
-    alt_min = snowline_parametrization_dataset.coords["altitude_min"].min()
-    return plot_ensemble_snowline_polarplot(
-        snowline_per_aspects_lower=snowline_lower,
-        snowline_per_aspects_upper=snowline_upper,
-        alt_max=alt_max,
-        alt_min=alt_min,
-        ax=ax,
-        label=label,
-        color=color,
-    )
