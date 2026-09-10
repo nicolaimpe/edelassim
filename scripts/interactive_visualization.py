@@ -16,12 +16,12 @@ from edelassim.observations import (
     valid_snow_cover_fraction_s2,
     valid_snow_cover_fraction_viirs_mf,
 )
-from edelassim.visualization import (
-    FSC_CMAP_SNOW_COVER,
-    add_2d_plot,
+from edelassim.visualization.interactive_plots import InteractiveSeasonExploreButtons
+from edelassim.visualization.polar import (
     plot_ensemble_snowline_polarplot_from_semidistributed,
     plot_snowline_polarplot_from_semidistributed,
 )
+from edelassim.visualization.spatial import FSC_CMAP_SNOW_COVER, add_2d_plot
 
 
 def quantile_index(arr, q):
@@ -72,7 +72,6 @@ def prev_good_date_viirs(event):
         if d < current_date:
             current_date = d
             break
-
     update_plot()
 
 
@@ -97,14 +96,6 @@ def prev_good_date_s2(event):
             break
 
     update_plot()
-
-
-# def update_a(val):
-#     global current_a
-#     # Find closest value
-#     current_a = min(a_values, key=lambda x: abs(x - val))
-#     slider_a.set_val(current_a)  # Snap slider
-#     update_plot()
 
 
 def change_a(delta):
@@ -225,7 +216,7 @@ def update_plot():
 
     date_text.set_text(str(current_date.date()))
     # Do not remove ticks for the snowline plot
-    fig.canvas.draw_idle()
+    fig_maps.canvas.draw_idle()
 
 
 # Module configuration
@@ -252,60 +243,26 @@ if __name__ == "__main__":
     labels = ("Sentinel-2", "Edelweiss OL", "Edelweiss assim", "VIIRS")
     colors = ("black", "blue", "purple", "red")
 
-    # Create figure and polar axes
-    fig = plt.figure(figsize=(20, 10))
     # Initial date
     current_date = datetime(2021, 11, 1)
 
-    ##################### Create button axes
-    button_width = 0.07
-    button_height = 0.025
-    button_y1 = 0.12
-    button_y2 = 0.08
-    button_x1 = 0.02
+    buttons = InteractiveSeasonExploreButtons()
+    buttons.btn_d_minus.on_clicked(lambda e: change_day(-1))
+    buttons.btn_d_plus.on_clicked(lambda e: change_day(1))
 
-    ax_d_minus = plt.axes([button_x1 + button_width, button_y1, button_width, button_height])
-    ax_d_plus = plt.axes([button_x1 + 2 * button_width, button_y1, button_width, button_height])
-    ax_m_minus = plt.axes([button_x1, button_y1, button_width, button_height])
-    ax_m_plus = plt.axes([button_x1 + 3 * button_width, button_y1, button_width, button_height])
-    ax_a_minus = plt.axes([0.35, 0.35, 0.03, 0.02])
-    ax_a_plus = plt.axes([0.40, 0.35, 0.03, 0.02])
-    ax_mb_minus = plt.axes([0.35, 0.20, 0.03, 0.02])
-    ax_mb_plus = plt.axes([0.40, 0.20, 0.03, 0.02])
+    buttons.btn_m_minus.on_clicked(lambda e: change_month(-1))
+    buttons.btn_m_plus.on_clicked(lambda e: change_month(1))
 
-    ax_next_good_viirs = plt.axes([button_x1 + 2 * button_width, button_y2, button_width, button_height])
-    ax_prev_good_viirs = plt.axes([button_x1 + button_width, button_y2, button_width, button_height])
-    ax_next_good_s2 = plt.axes([button_x1 + 3 * button_width, button_y2, button_width, button_height])
-    ax_prev_good_s2 = plt.axes([button_x1, button_y2, button_width, button_height])
+    buttons.btn_next_good_viirs.on_clicked(next_good_date_viirs)
+    buttons.btn_prev_good_viirs.on_clicked(prev_good_date_viirs)
+    buttons.btn_next_good_s2.on_clicked(next_good_date_s2)
+    buttons.btn_prev_good_s2.on_clicked(prev_good_date_s2)
 
-    btn_d_minus = Button(ax_d_minus, "D-")
-    btn_d_plus = Button(ax_d_plus, "D+")
-    btn_m_minus = Button(ax_m_minus, "M-")
-    btn_m_plus = Button(ax_m_plus, "M+")
-    btn_next_good_viirs = Button(ax_next_good_viirs, "Next good VIIRS")
-    btn_prev_good_viirs = Button(ax_prev_good_viirs, "Prev Good VIIRS")
-    btn_next_good_s2 = Button(ax_next_good_s2, "Next good S2")
-    btn_prev_good_s2 = Button(ax_prev_good_s2, "Prev Good S2")
-    btn_a_minus = Button(ax_a_minus, "a-")
-    btn_a_plus = Button(ax_a_plus, "a+")
-    btn_mb_minus = Button(ax_mb_minus, "member-")
-    btn_mb_plus = Button(ax_mb_plus, "member+")
+    buttons.btn_a_minus.on_clicked(lambda e: change_a(-1))
+    buttons.btn_a_plus.on_clicked(lambda e: change_a(1))
 
-    btn_d_minus.on_clicked(lambda e: change_day(-1))
-    btn_d_plus.on_clicked(lambda e: change_day(1))
-    btn_m_minus.on_clicked(lambda e: change_month(-1))
-    btn_m_plus.on_clicked(lambda e: change_month(1))
-
-    btn_next_good_viirs.on_clicked(next_good_date_viirs)
-    btn_prev_good_viirs.on_clicked(prev_good_date_viirs)
-    btn_next_good_s2.on_clicked(next_good_date_s2)
-    btn_prev_good_s2.on_clicked(prev_good_date_s2)
-
-    btn_a_minus.on_clicked(lambda e: change_a(-1))
-    btn_a_plus.on_clicked(lambda e: change_a(1))
-
-    btn_mb_minus.on_clicked(lambda e: change_mb(-1))
-    btn_mb_plus.on_clicked(lambda e: change_mb(1))
+    buttons.btn_mb_minus.on_clicked(lambda e: change_mb(-1))
+    buttons.btn_mb_plus.on_clicked(lambda e: change_mb(1))
 
     ########################### Read data ##########################################################
 
@@ -352,26 +309,27 @@ if __name__ == "__main__":
     current_member = member_values[0]
 
     logger.info("Plotting")
-    ax_s2 = fig.add_subplot(3, 4, 1)
-    ax_edelweiss = fig.add_subplot(3, 4, 2)
-    ax_viirs = fig.add_subplot(3, 4, 3)
-    ax_diff = fig.add_subplot(3, 4, 4)
-    ax_snow_depth = fig.add_subplot(3, 4, 6)
-    ax_precip = fig.add_subplot(3, 4, 7)
-    ax_phase = fig.add_subplot(3, 4, 8)
-    ax_snowlines = fig.add_subplot(3, 4, 11, projection="polar")
-    ax_snow_rain_line = fig.add_subplot(3, 4, 12, projection="polar")
+    fig_maps = plt.figure(figsize=(20, 10))
+    ax_s2 = fig_maps.add_subplot(3, 4, 1)
+    ax_edelweiss = fig_maps.add_subplot(3, 4, 2)
+    ax_viirs = fig_maps.add_subplot(3, 4, 3)
+    ax_diff = fig_maps.add_subplot(3, 4, 4)
+    ax_snow_depth = fig_maps.add_subplot(3, 4, 6)
+    ax_precip = fig_maps.add_subplot(3, 4, 7)
+    ax_phase = fig_maps.add_subplot(3, 4, 8)
+    ax_snowlines = fig_maps.add_subplot(3, 4, 11, projection="polar")
+    ax_snow_rain_line = fig_maps.add_subplot(3, 4, 12, projection="polar")
     # ax_temperature = fig.add_subplot(258)
     axs_snow_cover = [ax_s2, ax_edelweiss, ax_viirs]
     axs_all = [*axs_snow_cover, ax_diff, ax_precip, ax_snowlines, ax_snow_depth, ax_precip, ax_phase, ax_snow_rain_line]
     # fig, axs = plt.subplots(1, 2, figsize=(5, 8), subplot_kw={"projection": "polar"}, layout="constrained")
     # fig.subplots_adjust(bottom=0.35)  # Room for buttons
-    date_text = fig.suptitle(str(current_date.date()), y=0.98)
-    a_text = fig.text(s=f"a = {current_a}", y=0.32, x=0.37)
-    mb_text = fig.text(s=f"member = {'avg.' if current_member == -1 else current_member}", y=0.25, x=0.37)
+    date_text = fig_maps.suptitle(str(current_date.date()), y=0.98)
+    a_text = fig_maps.text(s=f"a = {current_a}", y=0.32, x=0.37)
+    mb_text = fig_maps.text(s=f"member = {'avg.' if current_member == -1 else current_member}", y=0.25, x=0.37)
 
     # Initial plot
-    fig.subplots_adjust(bottom=0.05, top=0.96, left=0.05, hspace=1e-4, right=0.96, wspace=1e-4)
+    fig_maps.subplots_adjust(bottom=0.05, top=0.96, left=0.05, hspace=1e-4, right=0.96, wspace=1e-4)
     update_plot()
     # plt.tight_layout()
 
