@@ -41,3 +41,17 @@ def extract_bdclim_locations_to_shapefile(bdclim_ds: xr.Dataset, export_path: st
     if export_path is not None:
         gdf.to_file(export_path)
     return gdf
+
+
+def find_station_imshow_location(x_station: float, y_station: float, grid_coords_x: np.ndarray, grid_coords_y: np.ndarray):
+    # To plot over a map plotted via imshow
+    col_station = np.abs(grid_coords_x - x_station).argmin()
+    row_station = np.abs(grid_coords_y - y_station).argmin()
+    x_station_grid_nearest = grid_coords_x[col_station]
+    y_station_grid_nearest = grid_coords_y[row_station]
+    grid_width = grid_coords_x[-1] - grid_coords_x[0]
+    grid_height = grid_coords_y[0] - grid_coords_y[-1]
+    x_station_plot_location = col_station + (x_station - x_station_grid_nearest) * len(grid_coords_x) / grid_width
+    y_station_plot_location = row_station + (y_station - y_station_grid_nearest) * len(grid_coords_y) / grid_height
+    # y_station_plot_location = len(grid_coords_y) - y_station_plot_location
+    return x_station_plot_location, y_station_plot_location

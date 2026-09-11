@@ -33,3 +33,11 @@ def find_common_correspondences(data_1: xr.Dataset, data_2: xr.Dataset) -> Tuple
     data_1_correspondences = data_1_correspondences[~np.isnan(data_1_correspondences)]
     data_2_correspondences = data_2_correspondences[~np.isnan(data_2_correspondences)]
     return data_1_correspondences, data_2_correspondences
+
+
+def compute_rmse(diff_array: np.ndarray | xr.DataArray) -> np.ndarray:
+    if type(diff_array) == xr.DataArray:
+        diff_array = diff_array.values
+    n = np.count_nonzero(~np.isnan(diff_array))
+    squared_error = diff_array**2
+    return np.sqrt(np.nansum(squared_error) / n)

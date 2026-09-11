@@ -74,9 +74,11 @@ def plot_elevation_lines(ax: Axes, dem: xr.DataArray, elevation_step: int = 300)
     ax.clabel(elevation_lines, levels, inline=True, fontsize=5, fmt="%.1f")
 
 
-def add_2d_plot(data: np.ndarray, ax: Axes, dem: xr.DataArray, title: str | None = None, **kwargs):
+def add_2d_plot(data: xr.DataArray, ax: Axes, dem: xr.DataArray, title: str | None = None, **kwargs):
     ax.imshow(data, **kwargs)
     add_colorbar(ax=ax)
     plot_elevation_lines(ax=ax, dem=dem)
     ax.set_title(title)
     ax.set_xticks([]), ax.set_yticks([])
+    # ax.set_xticks(data.coords["x"].values), ax.set_yticks(data.coords["y"].values)
+    # ax.set_xticklabels([]), ax.set_yticklabels([])
