@@ -7,6 +7,7 @@ import numpy as np
 import xarray as xr
 from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from matplotlib.gridspec import GridSpec
+from matplotlib.widgets import Button
 from pyproj import CRS, Proj, Transformer, transform
 from sklearn.metrics import mean_squared_error
 
@@ -83,6 +84,18 @@ def next_good_date(good_dates_list: list[datetime]):
     update_all_plots()
 
 
+def change_period_length(delta: int):
+    global current_period_length
+    current_period_length_idx = list(period_lengths.values()).index(current_period_length)
+    current_period_length_idx += delta
+    if current_period_length_idx == len(period_lengths):
+        current_period_length_idx = 0
+    elif current_period_length_idx == -1:
+        current_period_length_idx = len(period_lengths) - 1
+    current_period_length = list(period_lengths.values())[current_period_length_idx]
+    update_station_plot()
+
+
 def change_a(delta: int):
     global current_a
     current_a_idx = list(a_values).index(current_a)
@@ -141,7 +154,6 @@ def update_spatial_plots():
     fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=current_a, b=0.11)
     add_2d_plot(fsc_edel, ax_edel_ol_fsc, dem_250m, "Edelweiss OL FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
-    print(diff_edel_viirs)
     add_2d_plot(
         diff_edel_viirs,
         ax_diff_ol,
@@ -255,8 +267,11 @@ def update_station_plot():
     add_2d_plot(fsc_edel_data, ax_station_map_fsc, dem_250m, "Edelweiss assim FSC [-]", cmap=FSC_CMAP_SNOW_COVER)
     ax_station_map_sd.plot(imshow_locations[:, 0], imshow_locations[:, 1], linewidth=0, marker="*", color="y", picker=5)
 
+    period = slice(current_date, current_date + current_period_length)
     # BDclim
-    sd_time_station = bdclim.where(bdclim["x"] == x_station, drop=True).where(bdclim["y"] == y_station, drop=True)
+    sd_time_station = (
+        bdclim.sel(time=period).where(bdclim["x"] == x_station, drop=True).where(bdclim["y"] == y_station, drop=True)
+    )
     station_name = sd_time_station.coords["Station_Name"].values[0]
     altitude = sd_time_station.coords["ZS"].values[0]
     t_coord_bdclim = sd_time_station.coords["time"]
@@ -273,7 +288,7 @@ def update_station_plot():
     ax_station_time_fsc.set_title(f"{station_name} - alt. {altitude}m - FSC [-]")
 
     # SD Open loop
-    sd_edel_station_ol = snow_depth_edel_ol_ds.sel(x=x_station, y=y_station, method="nearest")
+    sd_edel_station_ol = snow_depth_edel_ol_ds.sel(time=period).sel(x=x_station, y=y_station, method="nearest")
     plot_ensemble_time_series(
         sd_edel_station_ol, mb_to_plot=current_member, ax=ax_station_time_sd, color=COLORS["edel_ol"], label=LABELS["edel_ol"]
     )
@@ -281,7 +296,7 @@ def update_station_plot():
     fig_stations.text(x=0.15, y=0.37, s=f"RMSE OL - in situ: {compute_rmse(diff_edel_insitu):.2f}")
 
     # SD Assim
-    sd_edel_station_an = snow_depth_edel_an_ds.sel(x=x_station, y=y_station, method="nearest")
+    sd_edel_station_an = snow_depth_edel_an_ds.sel(time=period).sel(x=x_station, y=y_station, method="nearest")
     plot_ensemble_time_series(
         sd_edel_station_an, mb_to_plot=current_member, ax=ax_station_time_sd, color=COLORS["edel_an"], label=LABELS["edel_an"]
     )
@@ -317,7 +332,7 @@ def update_station_plot():
     ax_station_time_fsc.grid(True)
 
     # Pleaides
-    sd_pleiades_station = pleiades.sel(x=x_station, y=y_station, method="nearest")
+    sd_pleiades_station = pleiades.sel(time=period).sel(x=x_station, y=y_station, method="nearest")
     ax_station_time_sd.plot(
         sd_pleiades_station.time,
         sd_pleiades_station.values,
@@ -331,9 +346,11 @@ def update_station_plot():
     # Sentinel-2
     trans = Transformer.from_crs(2154, 32631)
     x_station_s2, y_station_s2 = trans.transform(x_station, y_station)
-    snow_cover_s2_station = snow_cover_s2.sel(time=good_dates_s2).sel(x=x_station_s2, y=y_station_s2, method="nearest")
+    snow_cover_s2_station = (
+        snow_cover_s2.sel(time=good_dates_s2).sel(time=period).sel(x=x_station_s2, y=y_station_s2, method="nearest")
+    )
     ax_station_time_fsc.plot(
-        snow_cover_s2_station.time,
+        snow_cover_s2_station.time + np.timedelta64(10, "h") + np.timedelta64(30, "m"),  # Sentinel-2 10:30 am pass
         snow_cover_s2_station,
         marker="s",
         mfc="none",
@@ -344,14 +361,16 @@ def update_station_plot():
     )
 
     # VIIRS
-    snow_cover_viirs_station = snow_cover_viirs.sel(time=good_dates_viirs).sel(x=x_station, y=y_station, method="nearest")
+    snow_cover_viirs_station = (
+        snow_cover_viirs.sel(time=good_dates_viirs).sel(time=period).sel(x=x_station, y=y_station, method="nearest")
+    )
     ax_station_time_fsc.plot(
-        snow_cover_viirs_station.time,
+        snow_cover_viirs_station.time + np.timedelta64(12, "h"),  # Observation assimilated at 12h
         snow_cover_viirs_station,
         marker="o",
         mfc="none",
         linewidth=0,
-        markersize=3,
+        markersize=8,
         color=COLORS["viirs"],
         label=LABELS["viirs"],
     )
@@ -366,6 +385,8 @@ def update_station_plot():
 
     ax_station_time_sd.legend()
     ax_station_time_fsc.legend()
+    current_period_length_idx = list(period_lengths.values()).index(current_period_length)
+    fig_stations.text(s=f"Period = {list(period_lengths.keys())[current_period_length_idx]}", y=0.36, x=0.03)
     fig_stations.suptitle(str(current_date.date()))
     fig_stations.canvas.draw()
 
@@ -409,10 +430,12 @@ if __name__ == "__main__":
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
     # Snowline plots
     LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "Edelweiss OL", "edel_an": "Edelweiss assim"}
-    COLORS = {"s2": "black", "viirs": "red", "edel_ol": "blue", "edel_an": "purple"}
+    COLORS = {"s2": "black", "viirs": "orange", "edel_ol": "blue", "edel_an": "red"}
 
     # Initial date
     current_date = datetime(2021, 11, 1)
+    period_length = timedelta(days=30)
+    date_end = current_date + period_length
 
     fig_buttons = plt.figure(figsize=(8, 2))
     buttons = InteractiveSeasonExploreButtons(fig=fig_buttons)
@@ -442,16 +465,16 @@ if __name__ == "__main__":
     mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
     snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
     mask_20m = mask.rio.reproject_match(snow_cover_s2)
-    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m)).sel(time=slice("2021-11", "2022-01-01"))
+    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m))
 
     dem_250m = xr.open_dataarray(dem_250m_filepath).sel(band=1)
     dem_20m = xr.open_dataarray(dem_20m_filepath).sel(band=1)
 
     snow_cover_viirs = valid_snow_cover_fraction_viirs_mf(
         xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
-    ).sel(time=slice("2021-11", "2022-01-01"))
+    )
 
-    snow_depth_edel_ol_ds = xr.open_dataset(f"{edelweiss_ol_folder}/spatial.nc").sel(time=slice("2021-11", "2022-01-01"))
+    snow_depth_edel_ol_ds = xr.open_dataset(f"{edelweiss_ol_folder}/spatial.nc")
     snow_depth_edel_ol_ds = snow_depth_edel_ol_ds.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
     snow_depth_edel_an_ds = xr.open_dataset(f"{edelweiss_an_folder}/spatial.nc")
     snow_depth_edel_an_ds = snow_depth_edel_an_ds.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
@@ -474,18 +497,30 @@ if __name__ == "__main__":
     bdclim = xr.open_dataarray(bdclim_filepath).sel(time=slice(start_time, end_time))
     x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim)
     pleiades = (xr.open_dataset(pleiades_path).where(1 - mask).sel(time=slice(start_time, end_time))).data_vars["snow_depth"]
-    # print(pleiades)
 
     good_dates_s2 = find_clear_dates_s2(snow_cover_s2=snow_cover_s2)
     good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
 
-    # Slider for observation operator values
+    # values for observation operator values
     a_values = snowline_ol_edel_ds.coords["a"].values  # or from your DataArray
     # Initial value for observation operator parametrization
     current_a = a_values[0]
 
-    # Slider for member values
+    # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray
+    # Initial value for observation operator parametrization
+    current_member = member_values[0]
+
+    # Values for member values
+    period_lengths = {
+        "1 day": timedelta(days=1),
+        "1 week": timedelta(weeks=1),
+        "1 month": timedelta(days=30),
+        "6 months": timedelta(days=180),
+        "1 year": timedelta(days=365),
+    }
+    # Initial value
+    current_period_length = period_lengths["1 month"]
     # Initial value for observation operator parametrization
     current_member = member_values[0]
 
@@ -518,6 +553,7 @@ if __name__ == "__main__":
     ax_snow_rain_line = fig_snowlines.add_subplot(2, 1, 2, projection="polar")
     axs_snowlines = [ax_snowlines, ax_snow_rain_line]
 
+    ## Station plot
     fig_stations = plt.figure(figsize=(132, 12))
     # Put the figure on the left upper cotner of the screen
     fig_stations.canvas.manager.window.wm_geometry("+0+0")
@@ -537,13 +573,16 @@ if __name__ == "__main__":
             for x, y in zip(x_coords_stations, y_coords_stations)
         ]
     )
+    ax_change_period_length = fig_stations.add_axes([0.03, 0.33, 0.07, 0.03])
+    button_change_period_length = Button(ax_change_period_length, "Change period")
+    button_change_period_length.on_clicked(lambda e: change_period_length(1))
 
+    # Date title
     fig_maps.suptitle(str(current_date.date()), y=0.98)
     fig_snowlines.suptitle(str(current_date.date()), y=0.98)
     fig_stations.suptitle(str(current_date.date()), y=0.98)
 
     fig_stations.canvas.mpl_connect("pick_event", on_pick)
-
     # Initial plot
     fig_maps.subplots_adjust(bottom=0.05, top=0.96, left=0.05, hspace=0.04, right=0.96, wspace=0.05)
     fig_stations.subplots_adjust(hspace=0.3, top=0.96, wspace=0.0)
