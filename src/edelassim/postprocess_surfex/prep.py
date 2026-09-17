@@ -1,5 +1,4 @@
 import glob
-from typing import List
 
 import numpy as np
 import xarray as xr
@@ -7,7 +6,7 @@ from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from pyproj import CRS
 
 
-def compute_snow_thickness_and_mass_from_prep(
+def compute_snow_depth_thickness_mass_from_prep(
     prep_ds: xr.Dataset, slope_da: xr.DataArray, crs: CRS, output_file: str | None = None
 ) -> float:
     # Merci Bastien
@@ -27,20 +26,15 @@ def compute_snow_thickness_and_mass_from_prep(
 
     total_thickness = np.nansum(thickness_layers, axis=0)
     total_mass = np.nansum(mass_layers, axis=0)
-    thickness_dep_tot = prep_ds.data_vars["DEP_TOT"].values[0]
 
     x_coords = np.unique(prep_ds.data_vars["XX"].values)
     y_coords = np.unique(prep_ds.data_vars["XY"].values)
     new_shape = (len(y_coords), len(x_coords))
-    total_thickness_da = xr.DataArray(
-        np.reshape(total_thickness, shape=new_shape), coords={"y": y_coords, "x": x_coords}
-    ) / np.cos(np.deg2rad(slope_da))
+    total_thickness_da = xr.DataArray(np.reshape(total_thickness, shape=new_shape), coords={"y": y_coords, "x": x_coords})
+    snow_depth_da = total_thickness_da / np.cos(np.deg2rad(slope_da))
     total_mass_da = xr.DataArray(np.reshape(total_mass, shape=new_shape), coords={"y": y_coords, "x": x_coords})
-    thickness_dep_tot = xr.DataArray(
-        np.reshape(thickness_dep_tot, shape=new_shape), coords={"y": y_coords, "x": x_coords}
-    ) / np.cos(np.deg2rad(slope_da))
 
-    out_dataset = xr.Dataset({"snow_depth": total_thickness_da, "swe": total_mass_da, "dep_tot": thickness_dep_tot})
+    out_dataset = xr.Dataset({"snow_depth": snow_depth_da, "snow_thickness": total_thickness_da, "swe": total_mass_da})
     out_dataset = out_dataset.reindex(y=total_thickness_da.coords["y"].sortby("y", ascending=False))
     # projection sur la VERTICALE pour être coherent avec sortir des fichiers PRO
     out_dataset = out_dataset
@@ -50,10 +44,10 @@ def compute_snow_thickness_and_mass_from_prep(
     return out_dataset
 
 
-def compute_all_members_snow_thickness_and_mass(prep_files: List[str], slope_file: str) -> xr.Dataset:
+def compute_all_members_snow_depth_thickness_mass(prep_files: list[str], slope_file: str) -> xr.Dataset:
 
     prep_data_list = [
-        compute_snow_thickness_and_mass_from_prep(
+        compute_snow_depth_thickness_mass_from_prep(
             prep_ds=xr.open_dataset(prep_file), slope_da=xr.open_dataarray(slope_file).sel(band=1), crs=CRS.from_epsg(2154)
         )
         for prep_file in prep_files

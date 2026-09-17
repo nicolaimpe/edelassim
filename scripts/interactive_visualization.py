@@ -97,15 +97,15 @@ def change_period_length(delta: int):
 
 
 def change_a(delta: int):
-    global current_a
-    current_a_idx = list(a_values).index(current_a)
-    current_a_idx += delta
-    if current_a_idx == len(a_values):
-        current_a_idx = 0
-    elif current_a_idx == -1:
-        current_a_idx = len(a_values) - 1
-    current_a = a_values[current_a_idx]
-    # a_text.set_text(f"a = {current_a}")
+    global current_b
+    current_b_idx = list(b_values).index(current_b)
+    current_b_idx += delta
+    if current_b_idx == len(b_values):
+        current_b_idx = 0
+    elif current_b_idx == -1:
+        current_b_idx = len(b_values) - 1
+    current_b = b_values[current_b_idx]
+    # a_text.set_text(f"a = {current_b}")
     update_all_plots()
 
 
@@ -151,7 +151,7 @@ def update_spatial_plots():
     sd_data = snow_depth_edel_ol_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_data, ax_edel_ol_sd, dem_250m, "Edelweiss OL SD[m]", cmap=SNOW_DEPTH_CMAP)  # , vmin=0.001, vmax=2.5)
 
-    fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=current_a, b=0.11)
+    fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=0.11, b=current_b)
     add_2d_plot(fsc_edel, ax_edel_ol_fsc, dem_250m, "Edelweiss OL FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
     add_2d_plot(
@@ -168,7 +168,7 @@ def update_spatial_plots():
     sd_data = snow_depth_edel_an_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_data, ax_edel_an_sd, dem_250m, "Edelweiss assim SD [m]", cmap=SNOW_DEPTH_CMAP)  # , vmin=0.001, vmax=2.5)
 
-    fsc_edel = dickinson(sd=snow_depth_edel_an_ds.sel(time=current_date, member=current_member), a=current_a, b=0.11)
+    fsc_edel = dickinson(sd=snow_depth_edel_an_ds.sel(time=current_date, member=current_member), b=current_b, a=0.11)
     add_2d_plot(fsc_edel, ax_edel_an_fsc, dem_250m, "Edelweiss assim FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
     add_2d_plot(
@@ -209,10 +209,10 @@ def update_snowline_plots():
     plot_kwargs = {"ax": ax_snowlines}
 
     # Snowline
-    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, a=current_a))
+    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, a=current_b))
     plot_polar_envelop_member(current_edel_ol_sl, current_member, COLORS["edel_ol"], LABELS["edel_ol"], **plot_kwargs)
 
-    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date, a=current_a))
+    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date, a=current_b))
     plot_polar_envelop_member(current_edel_an_sl, current_member, COLORS["edel_an"], LABELS["edel_an"], **plot_kwargs)
 
     snowline_viirs = find_snowline_from_snow_penalization(snowline_viirs_ds.sel(time=current_date))
@@ -263,7 +263,7 @@ def update_station_plot():
     # Maps
     sd_edel_data = snow_depth_edel_an_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_edel_data, ax_station_map_sd, dem_250m, "Edelweiss assim SD [m]", cmap=SNOW_DEPTH_CMAP)
-    fsc_edel_data = dickinson(sd_edel_data, a=current_a, b=0.11)
+    fsc_edel_data = dickinson(sd_edel_data, b=current_b, a=0.11)
     add_2d_plot(fsc_edel_data, ax_station_map_fsc, dem_250m, "Edelweiss assim FSC [-]", cmap=FSC_CMAP_SNOW_COVER)
     ax_station_map_sd.plot(imshow_locations[:, 0], imshow_locations[:, 1], linewidth=0, marker="*", color="y", picker=5)
 
@@ -279,7 +279,7 @@ def update_station_plot():
     ax_station_time_sd.plot(
         t_coord_bdclim, sd_time_station.values, color="black", linestyle="dashed", linewidth=2, label="in situ"
     )
-    fsc_time_poste = dickinson(sd_time_station, a=current_a, b=0.11)
+    fsc_time_poste = dickinson(sd_time_station, b=current_b, a=0.11)
     ax_station_time_fsc.plot(
         t_coord_bdclim, fsc_time_poste.values, color="black", linestyle="dashed", linewidth=2, label="in situ"
     )
@@ -304,7 +304,7 @@ def update_station_plot():
     fig_stations.text(x=0.3, y=0.37, s=f"RMSE assim - in situ: {compute_rmse(diff_edel_insitu):.2f}")
 
     # FSC Open loop
-    fsc_edel_station_ol = dickinson(sd_edel_station_ol, a=current_a, b=0.11)
+    fsc_edel_station_ol = dickinson(sd_edel_station_ol, b=current_b, a=0.11)
     plot_ensemble_time_series(
         fsc_edel_station_ol,
         mb_to_plot=current_member,
@@ -316,7 +316,7 @@ def update_station_plot():
     fig_stations.text(x=0.15, y=0.06, s=f"RMSE OL - in situ: {compute_rmse(diff_edel_insitu):.2f}")
 
     # FSC Assim
-    fsc_edel_station_an = dickinson(sd_edel_station_an, a=current_a, b=0.11)
+    fsc_edel_station_an = dickinson(sd_edel_station_an, b=current_b, a=0.11)
     plot_ensemble_time_series(
         fsc_edel_station_an,
         mb_to_plot=current_member,
@@ -368,7 +368,6 @@ def update_station_plot():
         snow_cover_viirs_station.time + np.timedelta64(12, "h"),  # Observation assimilated at 12h
         snow_cover_viirs_station,
         marker="o",
-        mfc="none",
         linewidth=0,
         markersize=8,
         color=COLORS["viirs"],
@@ -386,7 +385,7 @@ def update_station_plot():
     ax_station_time_sd.legend()
     ax_station_time_fsc.legend()
     current_period_length_idx = list(period_lengths.values()).index(current_period_length)
-    fig_stations.text(s=f"Period = {list(period_lengths.keys())[current_period_length_idx]}", y=0.36, x=0.03)
+    fig_stations.text(s=f"Period = {list(period_lengths.keys())[current_period_length_idx]}", y=0.38, x=0.03)
     fig_stations.suptitle(str(current_date.date()))
     fig_stations.canvas.draw()
 
@@ -397,7 +396,7 @@ def update_all_plots():
     update_snowline_plots()
     update_station_plot()
     fig_buttons.texts.clear()
-    fig_buttons.text(s=f"a = {current_a}", y=0.65, x=0.7)
+    fig_buttons.text(s=f"a = {current_b}", y=0.65, x=0.7)
     fig_buttons.text(s=f"member = {'avg.' if current_member == -1 else current_member}", y=0.85, x=0.7)
 
     fig_buttons.canvas.draw_idle()
@@ -430,7 +429,7 @@ if __name__ == "__main__":
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
     # Snowline plots
     LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "Edelweiss OL", "edel_an": "Edelweiss assim"}
-    COLORS = {"s2": "black", "viirs": "orange", "edel_ol": "blue", "edel_an": "red"}
+    COLORS = {"s2": "black", "viirs": "red", "edel_ol": "blue", "edel_an": "magenta"}
 
     # Initial date
     current_date = datetime(2021, 11, 1)
@@ -502,9 +501,9 @@ if __name__ == "__main__":
     good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
 
     # values for observation operator values
-    a_values = snowline_ol_edel_ds.coords["a"].values  # or from your DataArray
+    b_values = snowline_ol_edel_ds.coords["a"].values  # or from your DataArray
     # Initial value for observation operator parametrization
-    current_a = a_values[0]
+    current_b = b_values[0]
 
     # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray
@@ -516,6 +515,7 @@ if __name__ == "__main__":
         "1 day": timedelta(days=1),
         "1 week": timedelta(weeks=1),
         "1 month": timedelta(days=30),
+        "2 months": timedelta(days=60),
         "6 months": timedelta(days=180),
         "1 year": timedelta(days=365),
     }

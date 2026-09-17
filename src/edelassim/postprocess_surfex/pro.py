@@ -48,7 +48,7 @@ def append_average_member_value(data: xr.DataArray) -> xr.DataArray:
 
 def edel_to_snowline(snow_depth_data: xr.Dataset, obs_operator_param: float, paths: MountainBinnerConfig):
     edelweiss_scf_a = xr.Dataset(
-        {"snow_cover_fraction": dickinson(sd=snow_depth_data.data_vars["DSN_T_ISBA"], a=obs_operator_param, b=0.11)}
+        {"snow_cover_fraction": dickinson(sd=snow_depth_data.data_vars["DSN_T_ISBA"], b=obs_operator_param, a=0.11)}
     )
     snowline_calculator = SnowCoverFractionToSnowline(
         fsc_image=edelweiss_scf_a,

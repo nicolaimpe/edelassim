@@ -257,7 +257,7 @@ if __name__ == "__main__":
     import pandas as pd
 
     from edelassim.observation_operators import zaitchik
-    from edelassim.postprocess_surfex.prep import compute_snow_thickness_and_mass_from_prep
+    from edelassim.postprocess_surfex.prep import compute_all_members_snow_depth_thickness_mass
 
     t0 = time.time()
     logger = logging.getLogger("logger")
@@ -278,7 +278,7 @@ if __name__ == "__main__":
 
     swe_data = (
         bg_preps.groupby("member")
-        .map(compute_snow_thickness_and_mass_from_prep, slope_da=slope_da, crs=CRS.from_epsg(2154))
+        .map(compute_all_members_snow_depth_thickness_mass, slope_da=slope_da, crs=CRS.from_epsg(2154))
         .data_vars["swe"]
     )
     # swe_data.to_netcdf("swe_data.nc")
