@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LightSource, LinearSegmentedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 ############ STATIC
@@ -75,6 +75,13 @@ def plot_elevation_lines(ax: Axes, dem: xr.DataArray, elevation_step: int = 300)
 
 
 def add_2d_plot(data: xr.DataArray, ax: Axes, dem: xr.DataArray, title: str | None = None, **kwargs):
+    # dummy_fig, dummy_ax = plt.subplots()
+    # image = dummy_ax.imshow(data, **kwargs)
+    # plt.close(dummy_fig)
+    # ls = LightSource(azdeg=315, altdeg=45)
+    # extract RGBA array from dummy image
+    # rgba = np.reshape(image.to_rgba(data.values.ravel()), data.shape + (4,))
+    # data_hillshade = ls.shade_rgb(rgba, dem.values, blend_mode="soft", vert_exag=0.5)
     ax.imshow(data, **kwargs)
     add_colorbar(ax=ax)
     plot_elevation_lines(ax=ax, dem=dem)

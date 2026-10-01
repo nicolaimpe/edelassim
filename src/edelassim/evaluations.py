@@ -21,7 +21,7 @@ class GrandesRoussesGrid20m(GSGrid):
         )
 
 
-def find_common_correspondences(data_1: xr.Dataset, data_2: xr.Dataset) -> Tuple[np.ndarray, np.ndarray]:
+def find_common_correspondences(data_1: xr.DataArray, data_2: xr.DataArray) -> tuple[np.ndarray, np.ndarray]:
     data_1_valid_mask = ~np.isnan(data_1)
     data_2_valid_mask = ~np.isnan(data_2)
 

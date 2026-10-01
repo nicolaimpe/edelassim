@@ -18,7 +18,7 @@ def set_polarplot(ax: Axes, alt_max: int = 0, alt_min: int = 4800) -> Axes:
     # ax.rticks(fontsize=9)
     ax.tick_params(axis="both", labelsize="x-small")
     ax.set_xticks(np.deg2rad(list(COMPASS_ROSE_DICT.values())))
-    ax.set_xticklabels(list(COMPASS_ROSE_DICT.keys()))
+    ax.set_xticklabels(list(COMPASS_ROSE_DICT.keys()), fontsize=14)
     ax.grid(True)
     return ax
 

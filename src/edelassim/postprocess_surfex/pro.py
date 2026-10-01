@@ -41,8 +41,17 @@ def append_average_member_value(data: xr.DataArray) -> xr.DataArray:
 
     data_avg = data.mean(dim="member")
     data_avg = data_avg.expand_dims(dim="member")
-    data_avg = data_avg.assign_coords(member=[-1])
+    data_avg = data_avg.assign_coords(member=[-2])
     out = xr.concat([data_avg, data], dim="member")
+    return out
+
+
+def append_median_member_value(data: xr.DataArray) -> xr.DataArray:
+
+    data_median = data.median(dim="member")
+    data_median = data_median.expand_dims(dim="member")
+    data_median = data_median.assign_coords(member=[-1])
+    out = xr.concat([data_median, data], dim="member")
     return out
 
 
@@ -57,5 +66,5 @@ def edel_to_snowline(snow_depth_data: xr.Dataset, obs_operator_param: float, pat
         ),
     )
     edelweiss_snowline = snowline_calculator.transform()
-    edelweiss_snowline = edelweiss_snowline.assign_coords({"a": ("a", [obs_operator_param])})
+    edelweiss_snowline = edelweiss_snowline.assign_coords({"b": ("b", [obs_operator_param])})
     return edelweiss_snowline

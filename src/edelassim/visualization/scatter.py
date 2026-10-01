@@ -25,15 +25,7 @@ def scatter_logit_plot(
 
 
 def boxplot_logit_plot(
-    data1: xr.Dataset,
-    data2: xr.Dataset,
-    ax_normal: Axes,
-    ax_logit: Axes,
-    color: str,
-    title: str,
-    pos: float,
-    width: float,
-    label: str | None = None,
+    data1: xr.Dataset, data2: xr.Dataset, ax_normal: Axes, ax_logit: Axes, pos: float, width: float, **kwargs
 ) -> None:
     data1_correspondences, data2_correspondences = find_common_correspondences(data_1=data1, data_2=data2)
     data1_correspondences = data1_correspondences.ravel()
@@ -41,20 +33,14 @@ def boxplot_logit_plot(
     residuals = data2_correspondences - data1_correspondences
     residuals = residuals[~np.isnan(residuals)]
     bp = ax_normal.boxplot(
-        residuals, positions=pos, showfliers=False, notch=True, patch_artist=True, widths=width, label=label
+        residuals, positions=pos, showfliers=False, notch=True, patch_artist=True, widths=width, label=kwargs["label"]
     )
-    bp["boxes"][0].set_facecolor(color)
-
-    ax_normal.set_title(title)
+    bp["boxes"][0].set_facecolor(kwargs["color"])
 
     residuals_logit = logit(data2_correspondences) - logit(data1_correspondences)
     residuals_logit = residuals_logit[~np.isnan(residuals_logit)]
     residuals_logit = residuals_logit[~np.isinf(residuals_logit)]
     bp = ax_logit.boxplot(
-        residuals_logit, positions=pos, showfliers=False, notch=True, patch_artist=True, widths=width, label=label
+        residuals_logit, positions=pos, showfliers=False, notch=True, patch_artist=True, widths=width, label=kwargs["label"]
     )
-    bp["boxes"][0].set_facecolor(color)
-
-    ax_logit.set_title(f"logit - {title}")
-    ax_normal.legend()
-    ax_logit.legend()
+    bp["boxes"][0].set_facecolor(kwargs["color"])

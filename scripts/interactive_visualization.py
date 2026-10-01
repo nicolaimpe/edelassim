@@ -209,10 +209,10 @@ def update_snowline_plots():
     plot_kwargs = {"ax": ax_snowlines}
 
     # Snowline
-    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, a=current_b))
+    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, b=current_b))
     plot_polar_envelop_member(current_edel_ol_sl, current_member, COLORS["edel_ol"], LABELS["edel_ol"], **plot_kwargs)
 
-    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date, a=current_b))
+    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date, b=current_b))
     plot_polar_envelop_member(current_edel_an_sl, current_member, COLORS["edel_an"], LABELS["edel_an"], **plot_kwargs)
 
     snowline_viirs = find_snowline_from_snow_penalization(snowline_viirs_ds.sel(time=current_date))
@@ -397,7 +397,7 @@ def update_all_plots():
     update_station_plot()
     fig_buttons.texts.clear()
     fig_buttons.text(s=f"a = {current_b}", y=0.65, x=0.7)
-    fig_buttons.text(s=f"member = {'avg.' if current_member == -1 else current_member}", y=0.85, x=0.7)
+    fig_buttons.text(s=f"member = {member_labels[current_member]}", y=0.85, x=0.7)
 
     fig_buttons.canvas.draw_idle()
     fig_stations.canvas.mpl_connect("pick_event", on_pick)
@@ -408,7 +408,7 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    xpid = "assim_viirs_all_clear_dates_november_2021"
+    xpid = "assim_viirs_cloudcover07_wy2122_d93"
     working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
     observation_folder = f"{working_folder}/observations/grandesrousses250m"
     simulation_folder = f"{working_folder}/simulations/postprocess"
@@ -417,7 +417,7 @@ if __name__ == "__main__":
     edelweiss_an_folder = f"{simulation_folder}/reanalysis/{xpid}/"
     viirs_folder = f"{observation_folder}/meteofrance/"
     forcing_ol_folder = f"{working_folder}/forcing/grandesrousses250m/open_loop"
-    forcing_analysis_folder = f"{working_folder}/forcing/reanalysis/{xpid}/"
+    forcing_analysis_folder = f"{working_folder}/forcing/postprocess/reanalysis/{xpid}/"
     bdclim_filepath = f"{working_folder}/observations/grandesrousses250m/bdclim/bdclim.nc"
     pleiades_path = f"{observation_folder}/pleiades_grandesrousses_all.nc"
 
@@ -501,14 +501,15 @@ if __name__ == "__main__":
     good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
 
     # values for observation operator values
-    b_values = snowline_ol_edel_ds.coords["a"].values  # or from your DataArray
+    b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray
     # Initial value for observation operator parametrization
     current_b = b_values[0]
 
     # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray
-    # Initial value for observation operator parametrization
-    current_member = member_values[0]
+    member_labels = dict.fromkeys(member_values)
+    member_labels.update({mb: mb for mb in member_values})
+    member_labels.update({-2: "mean", -1: "median"})
 
     # Values for member values
     period_lengths = {
@@ -522,7 +523,7 @@ if __name__ == "__main__":
     # Initial value
     current_period_length = period_lengths["1 month"]
     # Initial value for observation operator parametrization
-    current_member = member_values[0]
+    current_member = member_values[1]
 
     logger.info("Plotting")
     fig_maps = plt.figure(figsize=(20, 10))
