@@ -27,8 +27,8 @@ class InteractiveSeasonExploreButtons:
         ax_next_good_s2 = fig.add_axes([button_x1 + 3 * button_width, button_y2, button_width, button_height])
         ax_prev_good_s2 = fig.add_axes([button_x1, button_y2, button_width, button_height])
 
-        ax_a_minus = fig.add_axes([button_x1 + button_width, button_y3, button_width, button_height])
-        ax_a_plus = fig.add_axes([button_x1 + 2 * button_width, button_y3, button_width, button_height])
+        # ax_a_minus = fig.add_axes([button_x1 + button_width, button_y3, button_width, button_height])
+        # ax_a_plus = fig.add_axes([button_x1 + 2 * button_width, button_y3, button_width, button_height])
         ax_mb_minus = fig.add_axes([button_x1 + button_width, button_y4, button_width, button_height])
         ax_mb_plus = fig.add_axes([button_x1 + 2 * button_width, button_y4, button_width, button_height])
 
@@ -40,7 +40,7 @@ class InteractiveSeasonExploreButtons:
         self.btn_prev_good_viirs = Button(ax_prev_good_viirs, "Prev Good VIIRS")
         self.btn_next_good_s2 = Button(ax_next_good_s2, "Next good S2")
         self.btn_prev_good_s2 = Button(ax_prev_good_s2, "Prev Good S2")
-        self.btn_a_minus = Button(ax_a_minus, "op. ob. param.")
-        self.btn_a_plus = Button(ax_a_plus, "op. obs. param.+")
+        # self.btn_a_minus = Button(ax_a_minus, "op. ob. param.")
+        # self.btn_a_plus = Button(ax_a_plus, "op. obs. param.+")
         self.btn_mb_minus = Button(ax_mb_minus, "member-")
         self.btn_mb_plus = Button(ax_mb_plus, "member+")

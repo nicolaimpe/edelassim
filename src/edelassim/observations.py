@@ -108,7 +108,7 @@ def valid_snow_cover_fraction_viirs_mf(viirs_mf_data: xr.DataArray) -> xr.DataAr
     return valid_snow_cover_fraction
 
 
-def valid_snow_cover_fraction_s2(sentinel2_fsc_data: xr.DataArray):
+def valid_snow_cover_fraction_s2(sentinel2_fsc_data: xr.DataArray) -> xr.DataArray:
     valid_data_mask = sentinel2_fsc_data < S2_CLASSES["clouds"]
     valid_snow_cover_fraction = sentinel2_fsc_data.where(valid_data_mask) / S2_CLASSES["snow_cover"][-1]
     return valid_snow_cover_fraction

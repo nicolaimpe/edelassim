@@ -31,6 +31,7 @@ from edelassim.visualization.spatial import (
     SNOW_DEPTH_CMAP,
     add_2d_plot,
 )
+from edelassim.visualization.static_files import COLORS, LABELS
 from edelassim.visualization.time_series import plot_ensemble_time_series
 
 
@@ -96,17 +97,17 @@ def change_period_length(delta: int):
     update_station_plot()
 
 
-def change_a(delta: int):
-    global current_b
-    current_b_idx = list(b_values).index(current_b)
-    current_b_idx += delta
-    if current_b_idx == len(b_values):
-        current_b_idx = 0
-    elif current_b_idx == -1:
-        current_b_idx = len(b_values) - 1
-    current_b = b_values[current_b_idx]
-    # a_text.set_text(f"a = {current_b}")
-    update_all_plots()
+# def change_a(delta: int):
+#     global current_b
+#     current_b_idx = list(b_values).index(current_b)
+#     current_b_idx += delta
+#     if current_b_idx == len(b_values):
+#         current_b_idx = 0
+#     elif current_b_idx == -1:
+#         current_b_idx = len(b_values) - 1
+#     current_b = b_values[current_b_idx]
+#     # a_text.set_text(f"a = {current_b}")
+#     update_all_plots()
 
 
 def change_mb(delta: int):
@@ -149,7 +150,7 @@ def update_spatial_plots():
 
     # Open loop
     sd_data = snow_depth_edel_ol_ds.sel(time=current_date, member=current_member)
-    add_2d_plot(sd_data, ax_edel_ol_sd, dem_250m, "Edelweiss OL SD[m]", cmap=SNOW_DEPTH_CMAP)  # , vmin=0.001, vmax=2.5)
+    add_2d_plot(sd_data, ax_edel_ol_sd, dem_250m, "Edelweiss OL SD[m]", cmap=SNOW_DEPTH_CMAP, vmin=1e-3)
 
     fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=0.11, b=current_b)
     add_2d_plot(fsc_edel, ax_edel_ol_fsc, dem_250m, "Edelweiss OL FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
@@ -212,7 +213,7 @@ def update_snowline_plots():
     current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, b=current_b))
     plot_polar_envelop_member(current_edel_ol_sl, current_member, COLORS["edel_ol"], LABELS["edel_ol"], **plot_kwargs)
 
-    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date, b=current_b))
+    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date))
     plot_polar_envelop_member(current_edel_an_sl, current_member, COLORS["edel_an"], LABELS["edel_an"], **plot_kwargs)
 
     snowline_viirs = find_snowline_from_snow_penalization(snowline_viirs_ds.sel(time=current_date))
@@ -396,7 +397,7 @@ def update_all_plots():
     update_snowline_plots()
     update_station_plot()
     fig_buttons.texts.clear()
-    fig_buttons.text(s=f"a = {current_b}", y=0.65, x=0.7)
+    # fig_buttons.text(s=f"a = {current_b}", y=0.65, x=0.7)
     fig_buttons.text(s=f"member = {member_labels[current_member]}", y=0.85, x=0.7)
 
     fig_buttons.canvas.draw_idle()
@@ -408,7 +409,7 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    xpid = "assim_viirs_cloudcover07_wy2122_d93"
+    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
     working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
     observation_folder = f"{working_folder}/observations/grandesrousses250m"
     simulation_folder = f"{working_folder}/simulations/postprocess"
@@ -427,9 +428,6 @@ if __name__ == "__main__":
     glacier_mask_path = f"{landcover_folder}/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
     dem_250m_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
-    # Snowline plots
-    LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "Edelweiss OL", "edel_an": "Edelweiss assim"}
-    COLORS = {"s2": "black", "viirs": "red", "edel_ol": "blue", "edel_an": "magenta"}
 
     # Initial date
     current_date = datetime(2021, 11, 1)
@@ -449,8 +447,8 @@ if __name__ == "__main__":
     buttons.btn_next_good_s2.on_clicked(lambda e: next_good_date(good_dates_s2))
     buttons.btn_prev_good_s2.on_clicked(lambda e: last_good_date(good_dates_s2))
 
-    buttons.btn_a_minus.on_clicked(lambda e: change_a(-1))
-    buttons.btn_a_plus.on_clicked(lambda e: change_a(1))
+    # buttons.btn_a_minus.on_clicked(lambda e: change_a(-1))
+    # buttons.btn_a_plus.on_clicked(lambda e: change_a(1))
 
     buttons.btn_mb_minus.on_clicked(lambda e: change_mb(-1))
     buttons.btn_mb_plus.on_clicked(lambda e: change_mb(1))
@@ -480,7 +478,7 @@ if __name__ == "__main__":
 
     snowline_s2_ds = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
     snowline_ol_edel_ds = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
-    snowline_an_edel_ds = xr.open_dataset(f"{edelweiss_an_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
+    snowline_an_edel_ds = xr.open_dataset(f"{edelweiss_an_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
     snowline_viirs_ds = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
 
     forcing_ol = xr.open_mfdataset(f"{forcing_ol_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
@@ -501,9 +499,10 @@ if __name__ == "__main__":
     good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
 
     # values for observation operator values
-    b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray
+    # b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray
     # Initial value for observation operator parametrization
-    current_b = b_values[0]
+    # current_b = b_values[0]
+    current_b = 1.22
 
     # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray

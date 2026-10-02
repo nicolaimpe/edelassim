@@ -66,5 +66,5 @@ def edel_to_snowline(snow_depth_data: xr.Dataset, obs_operator_param: float, pat
         ),
     )
     edelweiss_snowline = snowline_calculator.transform()
-    edelweiss_snowline = edelweiss_snowline.assign_coords({"b": ("b", [obs_operator_param])})
+    # edelweiss_snowline = edelweiss_snowline.assign_coords({"b": ("b", [obs_operator_param])})
     return edelweiss_snowline

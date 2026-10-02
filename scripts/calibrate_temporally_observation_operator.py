@@ -150,7 +150,7 @@ period_starts = np.arange(period_start, period_end, interval)
 
 rmse_b_stations = []
 bias_b_stations = []
-b_values = (1, 1.15, 1.22, 2.1)
+b_values = (1, 1.11, 1.146, 1.22, 1.3143, 1.44, 1.55, 1.73, 2.1)
 for j, b in enumerate(b_values):
     rmse_stations = []
     bias_stations = []

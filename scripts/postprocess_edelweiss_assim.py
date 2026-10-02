@@ -40,11 +40,14 @@ logging.basicConfig(level=logging.INFO)
 # mirror --exclude-glob mb00*/prep/*/* --exclude-glob mb00*/soda/*/*
 
 
-vortex_config_folder = "../config/vortex_configs"
+# vortex_config_folder = "../config/vortex_configs"
+# get_pro_assim_simulation(vortex_config_file=f"{vortex_config_folder}/config_pro_assim.yaml")
 
-
+# Use wget to pull results
+# wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PRO*"
+# wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PART*"
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93"
+    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
     vconf = "reanalysis"
 
     simulation_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/{vconf}/{xpid}"
@@ -62,7 +65,8 @@ if __name__ == "__main__":
     # ############ EDELWEISS snowline
     logger.info("Edelweiss postprocessing - snowline calculation")
     # Corresponding for inf, 0.7, 0.5, 0.3, 0.1 m of snow height for 100% snow cover and b=0.11
-    obs_oper_param_list = [1, 1.157, 1.22, 1.367, 2.1]
+    # obs_oper_param_list = [1, 1.157, 1.22, 1.367, 2.1]
+    obs_operator_param = 1.22
     edelweiss = xr.open_dataset(f"{output_folder}/spatial.nc")
     dem_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
     slope_filepath = f"{topography_data_folder}/250m/SLP_GR_L93_250m.tif"
@@ -74,14 +78,17 @@ if __name__ == "__main__":
     topography_paths = MountainBinnerConfig(
         slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
     )
-    for param_b in obs_oper_param_list:
-        logger.info(f"b = {param_b}")
-        b_snowline = edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=param_b, paths=topography_paths)
-        edelweiss_snowline_list.append(b_snowline)
+    # for param_b in obs_oper_param_list:
+    # logger.info(f"b = {param_b}")
+    # b_snowline = edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths)
+    # edelweiss_snowline_list.append(b_snowline)
 
-    edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
-    edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
+    # edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
+    # edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
 
+    edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
+        f"{output_folder}/snowline_parametrization.nc"
+    )
     ############ Focing analysis
     # Swap forcing memmbers in assimilation window using PART file
     logger.info(
