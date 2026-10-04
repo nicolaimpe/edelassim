@@ -47,7 +47,7 @@ def get_spatial_datasets(actual_xpid: str) -> tuple[xr.Dataset, ...]:
     viirs = valid_snow_cover_fraction_viirs_mf(xr.open_dataset(viirs_file).where(1 - mask))
     # dem = xr.open_dataarray(dem_file)
 
-    s2 = xr.open_dataset(s2_path).data_vars["snow_cover_fraction"]
+    s2 = xr.open_dataset(s2_path)
     mask_20m = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154)).rio.reproject_match(s2)
     s2 = valid_snow_cover_fraction_s2(s2.where(1 - mask_20m))
     pleiades = xr.open_dataset(pleiades_path)

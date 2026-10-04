@@ -1,24 +1,17 @@
 from collections import Counter
-from dataclasses import dataclass
-from datetime import datetime
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import xarray as xr
 from matplotlib.axes import Axes
-from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
+from matplotlib.figure import Figure
+from mountain_data_binner.mountain_binner import MountainBinner
 from xarray.groupers import BinGrouper
 
-from edelassim.bdclim import crop_bdclim, find_station_locations
-from edelassim.evaluations import compute_rmse
-from edelassim.observation_operators import dickinson
-from edelassim.observations import valid_snow_cover_fraction_s2
-from edelassim.snowlines import find_snowline_from_snow_penalization
-from edelassim.visualization.polar import plot_polar_envelop_member, plot_snowline_polarplot, set_polarplot
-from edelassim.visualization.static_files import COLORS, LABELS, get_snowlines, get_spatial_datasets, topography_data_folder
+from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset, find_station_locations
+from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, topography_data_folder
 
 pos_month_dict = {
     "Aug": 0,
@@ -58,17 +51,27 @@ def plot_var_boxplot_array(data: xr.Dataset, ax: Axes, var: str, width: float = 
     return data
 
 
-def assign_altitude_bin_insitu(data: xr.Dataset) -> xr.Dataset:
-    altitude_bin_coord = [zs // 500 for zs in data.coords["ZS"].values]
+def decorate_boxplot(fig: Figure, ax: Axes, xticks: list, xticks_labels: list) -> None:
+    ax.grid()
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticks_labels)
+    ax.set_ylabel("SD [m]")
+    fig.legend(handles=custom_leg, bbox_to_anchor=(1.1, 0.6))
+    ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1], linewidth=2, color="black", linestyles="dashed")
+
+
+def assign_altitude_bin_insitu(data: xr.Dataset, altitude_step: float = 500) -> xr.Dataset:
+    altitude_bin_coord = [zs // altitude_step for zs in data.coords["ZS"].values]
     return data.assign_coords(altitude_bin=("num_poste", altitude_bin_coord))
 
 
-def assign_altitude_bin_pleiades(data: xr.Dataset) -> xr.Dataset:
-    altitude_bin_coord = data.data_vars["altitude"].values // 300
+def assign_altitude_bin_pleiades(data: xr.Dataset, altitude_step: float = 300) -> xr.Dataset:
+    altitude_bin_coord = data.data_vars["altitude"].values // altitude_step
     return data.assign_coords(altitude_bin=("stacked_y_x", altitude_bin_coord))
 
 
 def assign_aspect_bin_pleiades(data: xr.Dataset) -> xr.Dataset:
+    # +22.5 allows to align with rose compass
     aspect_bin_coord = (data.data_vars["aspect"].values + 22.5) // 45
     return data.assign_coords(aspect_bin=("stacked_y_x", aspect_bin_coord))
 
@@ -83,16 +86,13 @@ if __name__ == "__main__":
     xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
     period = slice("2021-11", "2022-07")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
-    snowline_openloop_ds, snowline_edel_ds, snowline_viirs_ds, snowline_s2_ds = get_snowlines(xpid)
 
     ### Station plots
     x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim)
     sd_station = bdclim.where(bdclim["x"] == x_poste, drop=True).where(bdclim["y"] == y_poste, drop=True)
-    # Xarray advanced indexing (according to Mistral)
-    x_poste_da = xr.DataArray(sd_station.x, dims="num_poste", coords={"num_poste": sd_station.num_poste})
-    y_poste_da = xr.DataArray(sd_station.y, dims="num_poste", coords={"num_poste": sd_station.num_poste})
-    sd_edel_station_openloop = edelweiss_openloop.sel(x=x_poste_da, y=y_poste_da, method="nearest", drop=True)
-    sd_edel_station_analysis = edelweiss_analysis.sel(x=x_poste_da, y=y_poste_da, method="nearest", drop=True)
+
+    sd_edel_station_openloop = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_openloop)
+    sd_edel_station_analysis = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_analysis)
 
     residuals_station_openloop = sd_edel_station_openloop.data_vars["DSN_T_ISBA"].sel(
         member=-1, time=period
@@ -115,31 +115,29 @@ if __name__ == "__main__":
     grouped_dataset_month_coord = grouped_dataset.resample(time="1ME").map(assign_month)
     fig, ax = plt.subplots(figsize=(12, 5))
     grouped_dataset_month_coord.groupby("num_month").map(plot_var_boxplot_array, ax=ax, var="num_month")
-    ax.grid()
+
     ax.set_title("Monthly snow depth residuals  Edelweiss vs in situ - ensemble median")
     xticks = list(set(grouped_dataset_month_coord.coords["num_month"].values))
-    ax.set_xticks(xticks)
-    ax.set_xticklabels([month_pos_dict[num_m] for num_m in xticks])
-    ax.set_ylabel("SD [m]")
+    decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=[month_pos_dict[num_m] for num_m in xticks])
 
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1, 0.5))
     ## Altitude boxplot
-    bins = BinGrouper(np.arange(1000, 3501, 500), labels=np.arange(1000, 3500, 500))
-    grouped_dataset_altitude_coord = grouped_dataset.groupby(ZS=bins).map(assign_altitude_bin_insitu)
+    bdclim_alt_step = 500
+    bins = BinGrouper(np.arange(1000, 3501, bdclim_alt_step), labels=np.arange(1000, 3500, bdclim_alt_step))
+    grouped_dataset_altitude_coord = grouped_dataset.groupby(ZS=bins).map(
+        assign_altitude_bin_insitu, altitude_step=bdclim_alt_step
+    )
 
     fig, ax = plt.subplots(figsize=(12, 5))
     grouped_dataset_altitude_coord.groupby("altitude_bin").map(plot_var_boxplot_array, ax=ax, var="altitude_bin")
 
-    ax.grid()
     ax.set_title("Altitude band snow depth residuals Edelweiss vs in situ - ensemble median")
     xticks = list(set(grouped_dataset_altitude_coord.coords["altitude_bin"].values))
-    ax.set_xticks(xticks)
     counter = Counter(grouped_dataset_altitude_coord.coords["altitude_bin"].values)
-    ax.set_xticklabels(
-        [f"{bin_label} - {bin_label + 500} \n n= {counter[bin_idx]} stations" for bin_idx, bin_label in enumerate(bins.labels)]
-    )
-    ax.set_ylabel("SD [m]")
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1, 0.5))
+    xticks_labels = [
+        f"{bin_label} - {bin_label + bdclim_alt_step} \n n= {counter[bin_idx]} stations"
+        for bin_idx, bin_label in enumerate(bins.labels)
+    ]
+    decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
 
     ### Pleiades boxplots
     pleiades = pleiades.sel(time=period).sel(band=1)
@@ -153,6 +151,7 @@ if __name__ == "__main__":
     )
 
     # Altitude boxplots
+    pleiades_alt_step = 300
     grouped_dataset = xr.Dataset(
         {
             "open_loop": residuals_pleiades_openloop,
@@ -162,21 +161,24 @@ if __name__ == "__main__":
             ).sel(band=1),
         }
     )
-    bins = BinGrouper(np.arange(400, 3401, 300), labels=np.arange(400, 3400, 300))
+    bins = BinGrouper(np.arange(400, 3401, pleiades_alt_step), labels=np.arange(400, 3400, pleiades_alt_step))
     fig, ax = plt.subplots(figsize=(15, 5))
-    grouped_dataset_altitude_coord = grouped_dataset.groupby(altitude=bins).map(assign_altitude_bin_pleiades)
+
+    grouped_dataset_altitude_coord = grouped_dataset.groupby(altitude=bins).map(
+        assign_altitude_bin_pleiades, altitude_step=pleiades_alt_step
+    )
     grouped_dataset_altitude_coord.groupby("altitude_bin").map(plot_var_boxplot_array, ax=ax, var="altitude_bin")
-    ax.grid()
+
     ax.set_title("Altitude band snow depth residuals Edelweiss vs Pleiades - ensemble median")
     xticks = np.array(list(set(grouped_dataset_altitude_coord.coords["altitude_bin"].values.flatten())))
     xticks = xticks[~np.isnan(xticks)]
-    ax.set_xticks(xticks)
     counter = Counter(grouped_dataset_altitude_coord.coords["altitude_bin"].values.flatten())
-    ax.set_xticklabels(
-        [f"{bin_label} - {bin_label + 300} \n n= {counter[bin_idx]} points" for bin_idx, bin_label in enumerate(bins.labels)]
-    )
-    ax.set_ylabel("SD [m]")
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1, 0.5))
+    xticks_labels = [
+        f"{bin_label} - {bin_label + pleiades_alt_step} \n n= {counter[bin_idx]} points"
+        for bin_idx, bin_label in enumerate(bins.labels)
+    ]
+
+    decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
 
     # Aspect boxplots
     grouped_dataset = xr.Dataset(
@@ -194,14 +196,11 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(15, 5))
     grouped_dataset_aspect_coord = grouped_dataset.groupby(aspect=bins).map(assign_aspect_bin_pleiades)
     grouped_dataset_aspect_coord.groupby("aspect_bin").map(plot_var_boxplot_array, ax=ax, var="aspect_bin")
-    ax.grid()
     ax.set_title("Aspect snow depth residuals Edelweiss vs Pleiades - ensemble median")
     xticks = np.array(list(set(grouped_dataset_aspect_coord.coords["aspect_bin"].values.flatten())))
-    ax.set_xticks(xticks)
     counter = Counter(grouped_dataset_aspect_coord.coords["aspect_bin"].values.flatten())
-    ax.set_xticklabels([f"{bin_label}\n n= {counter[bin_idx]} points" for bin_idx, bin_label in enumerate(bins.labels)])
-    ax.set_ylabel("SD [m]")
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1, 0.5))
+    xticks_labels = [f"{bin_label}\n n= {counter[bin_idx]} points" for bin_idx, bin_label in enumerate(bins.labels)]
+    decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
 
     # Time boxplots
     grouped_dataset = xr.Dataset(
@@ -214,52 +213,8 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(figsize=(8, 5))
     grouped_dataset_time_coord = grouped_dataset.assign_coords(time_bin=("time", np.arange(grouped_dataset.sizes["time"])))
     grouped_dataset_time_coord.groupby("time_bin").map(plot_var_boxplot_array, ax=ax, var="time_bin")
-    ax.grid()
     ax.set_title("Time snow depth residuals Edelweiss vs Pleiades - ensemble median")
     xticks = grouped_dataset_time_coord.coords["time_bin"].values
-    ax.set_xticks(xticks)
-    ax.set_xticklabels([pd.Timestamp(date.values).strftime("%b-%d") for date in grouped_dataset.coords["time"]])
-    ax.set_ylabel("SD [m]")
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1, 0.5))
-
+    xticks_labels = [pd.Timestamp(date.values).strftime("%b-%d") for date in grouped_dataset.coords["time"]]
+    decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
     plt.show()
-
-    # plt.show()
-    # rain_df["month_year"] = rain_df["date"].apply(lambda x: x.strftime("%b %Y"))
-
-    # fsc_station = dickinson(sd_station.data_vars["neigetotx"], a=0.11, b=2.1)
-    # fsc_edel_station_ol = dickinson(sd_edel_station_ol.data_vars["DSN_T_ISBA"], a=0.11, b=2.1)
-    # fsc_edel_station_an = dickinson(sd_edel_station_an.data_vars["DSN_T_ISBA"], a=0.11, b=2.1)
-
-    # period = slice("2021-11", "2022-02")
-    # # compute_rmse(res_ol.sel(member=-1, time=period).values), compute_rmse(res_an.sel(member=-1, time=period).values)
-    # fig, ax = plt.subplots()
-    # residuals_median_ol = res_ol.sel(time=period, member=-1).values.flatten()
-    # residuals_median_ol = residuals_median_ol[~np.isnan(residuals_median_ol)]
-    # residuals_median_an = res_an.sel(time=period, member=-1).values.flatten()
-    # residuals_median_an = residuals_median_an[~np.isnan(residuals_median_an)]
-
-    # residuals_median_fsc_ol = (fsc_edel_station_ol - fsc_station).sel(time=period, member=-1).values.flatten()
-    # residuals_median_fsc_ol = residuals_median_fsc_ol[~np.isnan(residuals_median_fsc_ol)]
-    # residuals_median_fsc_an = (fsc_edel_station_an - fsc_station).sel(time=period, member=-1).values.flatten()
-    # residuals_median_fsc_an = residuals_median_fsc_an[~np.isnan(residuals_median_fsc_an)]
-
-    # diff_edel_assim = (edelweiss_an - edelweiss_ol).data_vars["DSN_T_ISBA"]
-    # diff_edel_assim_median = diff_edel_assim.sel(time=period, member=-1).values.flatten()
-    # diff_edel_assim_median = diff_edel_assim_median[~np.isnan(diff_edel_assim_median)]
-
-    # ax.grid()
-    # ax.set_title("Snow depth vs BDCLIM")
-    # ax.grid
-    # fig, ax = plt.subplots()
-    # ax.boxplot(
-    #     [residuals_median_fsc_ol, residuals_median_fsc_an],
-    #     positions=[1, 2],
-    #     showfliers=False,
-    #     notch=True,
-    #     patch_artist=True,
-    #     widths=[0.1, 0.1],
-    #     label=["Open loop", "Assimilation"],
-    # )
-    # ax.set_title("FSC vs BDCLIM")
-    # ax.grid()

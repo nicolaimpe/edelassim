@@ -5,6 +5,7 @@ from scipy.special import logit
 from scipy.stats import pearsonr
 
 from edelassim.evaluations import find_common_correspondences
+from edelassim.visualization.static_files import COLORS, LABELS
 
 
 def scatter_logit_plot(
@@ -44,3 +45,39 @@ def boxplot_logit_plot(
         residuals_logit, positions=pos, showfliers=False, notch=True, patch_artist=True, widths=width, label=kwargs["label"]
     )
     bp["boxes"][0].set_facecolor(kwargs["color"])
+
+
+def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, ax: Axes):
+    # Should fix this member mean of Pleiades
+    ax.fill_between(
+        x_axis_data,
+        grouped_dataset.data_vars["open_loop"].quantile(0.1, dim="member").values.flatten(),
+        grouped_dataset.data_vars["open_loop"].quantile(0.9, dim="member").values.flatten(),
+        alpha=0.25,
+        color=COLORS["edel_ol"],
+        label=LABELS["edel_ol"],
+    )
+    ax.fill_between(
+        x_axis_data,
+        grouped_dataset.data_vars["analysis"].quantile(0.1, dim="member").values.flatten(),
+        grouped_dataset.data_vars["analysis"].quantile(0.9, dim="member").values.flatten(),
+        alpha=0.25,
+        color=COLORS["edel_an"],
+        label=LABELS["edel_an"],
+    )
+
+    ax.plot(
+        x_axis_data,
+        grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten(),
+        color=COLORS["edel_ol"],
+        linewidth=2,
+        linestyle="dashed",
+    )
+
+    ax.plot(
+        x_axis_data,
+        grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten(),
+        color=COLORS["edel_an"],
+        linewidth=2,
+        linestyle="dashed",
+    )

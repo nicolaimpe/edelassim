@@ -62,6 +62,7 @@ if __name__ == "__main__":
     snow_depth_edelweiss = append_average_member_value(snow_depth_edelweiss)
     snow_depth_edelweiss.to_netcdf(f"{output_folder}/spatial.nc")
 
+    
     # ############ EDELWEISS snowline
     logger.info("Edelweiss postprocessing - snowline calculation")
     # Corresponding for inf, 0.7, 0.5, 0.3, 0.1 m of snow height for 100% snow cover and b=0.11

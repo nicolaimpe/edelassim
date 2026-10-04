@@ -15,6 +15,17 @@ def find_station_locations(bdclim_dataset: xr.Dataset) -> Tuple[np.ndarray, np.n
     return x_poste, y_poste
 
 
+def extract_bdclim_locations_on_spatial_dataset(bdclim_dataset: xr.Dataset, spatial_dataset: xr.Dataset) -> xr.Dataset:
+    x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim_dataset)
+    sd_station = bdclim_dataset.where(bdclim_dataset["x"] == x_poste, drop=True).where(
+        bdclim_dataset["y"] == y_poste, drop=True
+    )
+    # Xarray advanced indexing (according to Mistral)
+    x_poste_da = xr.DataArray(sd_station.x, dims="num_poste", coords={"num_poste": sd_station.num_poste})
+    y_poste_da = xr.DataArray(sd_station.y, dims="num_poste", coords={"num_poste": sd_station.num_poste})
+    return spatial_dataset.sel(x=x_poste_da, y=y_poste_da, method="nearest", drop=True)
+
+
 def crop_bdclim(bdclim_netcdf_path: str, grid: GSGrid) -> xr.Dataset:
     lon_min, lat_min, lon_max, lat_max = grid.bounds_projected_to_epsg(4326)
     bdclim = xr.open_dataset(bdclim_netcdf_path)
