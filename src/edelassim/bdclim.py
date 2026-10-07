@@ -1,18 +1,21 @@
-from typing import Tuple
-
 import geopandas as gpd
 import numpy as np
-import shapely
 import xarray as xr
 from geospatial_grid.gsgrid import GSGrid
 from pyproj import Transformer
 from shapely import Point
 
 
-def find_station_locations(bdclim_dataset: xr.Dataset) -> Tuple[np.ndarray, np.ndarray]:
+def find_station_locations(bdclim_dataset: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
     transformer = Transformer.from_crs(4326, 2154, always_xy=True)
     x_poste, y_poste = transformer.transform(xx=bdclim_dataset.lon, yy=bdclim_dataset.lat)
     return x_poste, y_poste
+
+
+def filter_discontinuous_stations(bdclim_dataset: xr.Dataset) -> xr.Dataset:
+    discontinuos_station_mask = (np.isnan(bdclim_dataset.data_vars["neigetotx"])).any(dim="time")
+    print(discontinuos_station_mask)
+    return bdclim_dataset.where(1 - discontinuos_station_mask, drop=True)
 
 
 def extract_bdclim_locations_on_spatial_dataset(bdclim_dataset: xr.Dataset, spatial_dataset: xr.Dataset) -> xr.Dataset:

@@ -211,10 +211,15 @@ if __name__ == "__main__":
     )
 
     fig, ax = plt.subplots(figsize=(8, 5))
+    plt.rcParams["font.size"] = 14
     grouped_dataset_time_coord = grouped_dataset.assign_coords(time_bin=("time", np.arange(grouped_dataset.sizes["time"])))
-    grouped_dataset_time_coord.groupby("time_bin").map(plot_var_boxplot_array, ax=ax, var="time_bin")
+    grouped_dataset_time_coord.groupby("time_bin").map(plot_var_boxplot_array, ax=ax, var="time_bin", width=0.25)
     ax.set_title("Time snow depth residuals Edelweiss vs Pleiades - ensemble median")
     xticks = grouped_dataset_time_coord.coords["time_bin"].values
     xticks_labels = [pd.Timestamp(date.values).strftime("%b-%d") for date in grouped_dataset.coords["time"]]
     decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
+    # fig.patch.set_alpha(0.0)
+    # ax.legend()
+
+    # fig.savefig("/home/imperatoren/work/conferences/jc2/illustrations/bplots.png", format="png", dpi=600)
     plt.show()

@@ -4,7 +4,7 @@ from matplotlib.axes import Axes
 from scipy.special import logit
 from scipy.stats import pearsonr
 
-from edelassim.evaluations import find_common_correspondences
+from edelassim.evaluations import compute_rmse, find_common_correspondences
 from edelassim.visualization.static_files import COLORS, LABELS
 
 
@@ -49,35 +49,45 @@ def boxplot_logit_plot(
 
 def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, ax: Axes):
     # Should fix this member mean of Pleiades
+    qmin, qmax = 0.1, 0.9
+    median_openloop = grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten()
+    median_analysis = grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten()
+    reference = grouped_dataset.data_vars["bdclim"].mean(dim="member").values.flatten()
+
+    rmse_openloop = compute_rmse(median_openloop - reference)
+    rmse_analysis = compute_rmse(median_analysis - reference)
     ax.fill_between(
         x_axis_data,
-        grouped_dataset.data_vars["open_loop"].quantile(0.1, dim="member").values.flatten(),
-        grouped_dataset.data_vars["open_loop"].quantile(0.9, dim="member").values.flatten(),
+        grouped_dataset.data_vars["open_loop"].quantile(qmin, dim="member").values.flatten(),
+        grouped_dataset.data_vars["open_loop"].quantile(qmax, dim="member").values.flatten(),
         alpha=0.25,
         color=COLORS["edel_ol"],
-        label=LABELS["edel_ol"],
+        label=f"{LABELS['edel_ol']} p{qmin * 100} - p{qmax * 100}",
     )
     ax.fill_between(
         x_axis_data,
-        grouped_dataset.data_vars["analysis"].quantile(0.1, dim="member").values.flatten(),
-        grouped_dataset.data_vars["analysis"].quantile(0.9, dim="member").values.flatten(),
+        grouped_dataset.data_vars["analysis"].quantile(qmin, dim="member").values.flatten(),
+        grouped_dataset.data_vars["analysis"].quantile(qmax, dim="member").values.flatten(),
         alpha=0.25,
         color=COLORS["edel_an"],
-        label=LABELS["edel_an"],
+        label=f"{LABELS['edel_an']} p{qmin * 100} - p{qmax * 100}",
     )
 
     ax.plot(
         x_axis_data,
-        grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten(),
+        median_openloop,
         color=COLORS["edel_ol"],
         linewidth=2,
         linestyle="dashed",
+        label=f"{LABELS['edel_ol']} median, RMSE={rmse_openloop:.2f}",
     )
 
     ax.plot(
         x_axis_data,
-        grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten(),
+        median_analysis,
         color=COLORS["edel_an"],
+        label=f"{LABELS['edel_an']} median, RMSE={rmse_analysis:.2f}",
         linewidth=2,
         linestyle="dashed",
     )
+    ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="In situ")

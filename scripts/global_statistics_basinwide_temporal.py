@@ -5,22 +5,29 @@ import numpy as np
 import xarray as xr
 from matplotlib.axes import Axes
 from pyproj import Transformer
+from snowtools.scores.ensemble import EnsembleScores
 from xarray.groupers import BinGrouper, UniqueGrouper
 
-from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset, find_station_locations
+from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset, filter_discontinuous_stations, find_station_locations
+from edelassim.evaluations import compute_rmse
 from edelassim.filter import effective_sample_size_xarray
 from edelassim.observation_operators import dickinson
 from edelassim.observations import EdelweissGrandesRoussesGrid, find_clear_dates_s2, find_clear_dates_viirs
-from edelassim.postprocess_surfex.soda import duplicated_particles_multiple_assimilation, duplicated_particles_to_grid
+from edelassim.postprocess_surfex.soda import (
+    alpha_multiple_assimilation,
+    alpha_to_grid,
+    duplicated_particles_multiple_assimilation,
+    duplicated_particles_to_grid,
+)
 from edelassim.visualization.scatter import plot_ensemble_envelop
 from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, topography_data_folder, working_folder
 
 if __name__ == "__main__":
     xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
-    period = slice("2021-11", "2022-07")
+    period = slice("2021-11", "2022-06")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
 
-    bdclim = bdclim.sel(time=period)
+    bdclim = filter_discontinuous_stations(bdclim.sel(time=period))
     sd_edel_station_openloop = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_openloop).sel(
         time=period
     )
@@ -51,39 +58,34 @@ if __name__ == "__main__":
         },
         coords=sd_edel_station_openloop.coords,
     )
-    fig, axs = plt.subplots(2, 1, figsize=(12, 8))
-    fig.suptitle("Edelweiss vs in situ Basin wide")
+    fig, axs = plt.subplots(2, 1, figsize=(14, 7))
+    # plt.rcParams["font.size"] = 16
+    fig.suptitle(f"Edelweiss vs in situ ({bdclim.sizes['num_poste']} locations aggregated)")
     grouped_dataset_binned = grouped_dataset.groupby("member").mean(dim="num_poste")
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=grouped_dataset.coords["time"].values, ax=axs[0])
+    sd_pleiades_station = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=pleiades.sel(time=period))
     axs[0].plot(
-        grouped_dataset.coords["time"].values,
-        grouped_dataset_binned.data_vars["bdclim"].mean(dim="member").values.flatten(),
-        color="black",
-        linestyle="dashed",
-        linewidth=2,
-        label="In situ",
+        sd_pleiades_station.time,
+        sd_pleiades_station.data_vars["snow_depth"].mean(dim=("num_poste")).values,
+        marker="*",
+        linewidth=0,
+        markersize=15,
+        color="gold",
+        label="Pleiades",
     )
     axs[0].grid()
-    axs[0].legend()
+    # axs[0].legend()
     axs[0].set_ylabel("SD [m]")
 
     grouped_dataset_binned = dickinson(grouped_dataset).groupby("member").mean(dim="num_poste")
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=grouped_dataset.coords["time"].values, ax=axs[1])
-    axs[1].plot(
-        grouped_dataset.coords["time"].values,
-        grouped_dataset_binned.data_vars["bdclim"].mean(dim="member").values.flatten(),
-        color="black",
-        linestyle="dashed",
-        linewidth=2,
-        label="In situ",
-    )
     axs[1].plot(
         viirs_station.coords["time"].values,
         viirs_station.data_vars["snow_cover_fraction"].mean(dim="num_poste").values.flatten(),
         color=COLORS["viirs"],
         linewidth=0,
         marker=".",
-        markersize=10,
+        markersize=3,
         label=LABELS["viirs"],
     )
     axs[1].plot(
@@ -92,14 +94,16 @@ if __name__ == "__main__":
         color=COLORS["s2"],
         linewidth=0,
         marker="s",
-        markersize=10,
+        markersize=6,
         mfc="none",
         label=LABELS["s2"],
     )
-    axs[1].grid()
-    axs[1].legend()
-    axs[1].set_ylabel("FSC [-]")
 
+    axs[1].grid()
+    # axs[1].legend()
+    axs[1].set_ylabel("FSC [-]")
+    # fig.patch.set_alpha(0.0)
+    # fig.savefig("/home/imperatoren/work/conferences/jc2/illustrations/temporal.png", format="png", dpi=600)
     ## Bassin wide per altitude band total
     grouped_dataset = xr.Dataset(
         {
@@ -136,10 +140,8 @@ if __name__ == "__main__":
         n = (duplicated_particles == mb + 1).sum(dim=("member"))
         particle_occurrence[dict(member=mb)] = n
 
-    # print(particle_occurrence)
+    # Normalized Effective sample size mean
     eff_sample_size = effective_sample_size_xarray(weights=(particle_occurrence / particle_occurrence.sizes["member"]))
-    fig, ax = plt.subplots()
-    eff_sample_size.sel(time="2021-11-05").drop_vars("time")[:, :, 0].plot.imshow(ax=ax, x="x")
 
     cloud_mask = np.isnan(viirs)
     fsc_edel_openloop = dickinson(edelweiss_openloop).sel(time=period)
@@ -148,82 +150,102 @@ if __name__ == "__main__":
     mask = mask.sel(time=duplicated_particles.time, method="nearest")
     mask = mask.assign_coords({"time": duplicated_particles.time})
 
-    fig, ax = plt.subplots(figsize=(18, 5))
+    fig, ax = plt.subplots(figsize=(18, 3))
     global_ess = eff_sample_size.where(1 - mask).mean(dim=("x", "y"))
-    print(global_ess)
     ax.plot(
         global_ess.time, global_ess.values / duplicated_particles.sizes["member"], linewidth=0, marker="*", label="ESS/N_e"
     )
+
+    # Alpha mean
+    alpha_files = glob(f"{working_folder}/simulations/edelweiss/reanalysis/{xpid}/soda/*ALPHA*")
+    alpha_coefficients = alpha_to_grid(
+        alpha_multiple_assimilation(alpha_files=alpha_files), grid=EdelweissGrandesRoussesGrid()
+    )
+
+    alpha_coeff_mean = alpha_coefficients.where(1 - mask).mean(dim=("x", "y"))
+    ax.plot(alpha_coeff_mean.time, alpha_coeff_mean, linewidth=0, marker="s", label="alpha")
     ax.set_xticks(global_ess.time, minor=True)
     ax.grid(which="minor")
     ax.tick_params(axis="x", which="minor", bottom=False)
-    ax.set_title("Ensemble monitoring - Basin wide spatial mean")
+    ax.set_title("Ensemble monitoring - mean on x, y points")
     ax.legend()
-    # ax.set_xticks(global_ess.time)
-    # plt.show()
+
+    # CRPSS
+
+    def compute_crpss(data: xr.Dataset) -> xr.DataArray:
+        crps_open_loop = EnsembleScores(
+            timeObs=None, timeSim=None, obs=data.data_vars["bdclim"].values, ensemble=data.data_vars["open_loop"].values
+        ).CRPS()
+        crps_analysis = EnsembleScores(
+            timeObs=None, timeSim=None, obs=data.data_vars["bdclim"].values, ensemble=data.data_vars["analysis"].values
+        ).CRPS()
+        crpss = 1 - (crps_analysis / crps_open_loop)
+        return xr.DataArray(crpss)
+
+    grouped_dataset = xr.Dataset(
+        {
+            "open_loop": sd_edel_station_openloop.data_vars["DSN_T_ISBA"].sel(member=slice(0, None)),
+            "analysis": sd_edel_station_analysis.data_vars["DSN_T_ISBA"].sel(member=slice(0, None)),
+            "bdclim": bdclim.data_vars["neigetotx"],
+        },
+        coords=sd_edel_station_openloop.coords,
+    )
+    fig, ax = plt.subplots(figsize=(15, 2))
+    crpss = grouped_dataset.groupby(("num_poste", "time")).map(compute_crpss)
+    crpss_mean = crpss.mean(dim=("num_poste"))
+    ax.plot(crpss_mean.time, crpss_mean.values, linewidth=0, marker="^", label="CRPSS")
+
+    mae_open_loop = (
+        np.abs(sd_edel_station_openloop.data_vars["DSN_T_ISBA"].mean(dim="num_poste") - bdclim.data_vars["neigetotx"])
+        .sel(member=slice(0, None))
+        .mean(dim="member")
+        .mean(dim="num_poste")
+    )
+    mae_analysis = (
+        np.abs(sd_edel_station_analysis.data_vars["DSN_T_ISBA"].mean(dim="num_poste") - bdclim.data_vars["neigetotx"])
+        .sel(member=slice(0, None))
+        .mean(dim="member")
+        .mean(dim="num_poste")
+    )
+    maes = 1 - mae_analysis / mae_open_loop
+    ax.plot(maes.time, maes, linewidth=0, marker="o", label="MAES")
+    ax.grid()
+    ax.set_title(f"Temporal evolution error scores - mean on {bdclim.sizes['num_poste']} stations")
+    ax.legend()
+
+    fig, ax = plt.subplots(figsize=(15, 2))
+    ax.plot(mae_open_loop.time, mae_open_loop, linewidth=0, marker="o", color=COLORS["edel_ol"], label="open loop")
+    ax.plot(mae_analysis.time, mae_analysis, linewidth=0, marker="o", color=COLORS["edel_an"], label="assim")
+    ax.grid()
+    ax.set_title(f"MAE - mean on {bdclim.sizes['num_poste']} stations")
+    ax.legend()
+
+    residuals_ensemble_open_loop = sd_edel_station_openloop.data_vars["DSN_T_ISBA"] - sd_edel_station_openloop.data_vars[
+        "DSN_T_ISBA"
+    ].mean(dim="member")
+    sigma_ensemble_open_loop = np.sqrt(((residuals_ensemble_open_loop) ** 2).mean(dim="member")).mean(dim="num_poste")
+    residuals_ensemble_analysis = sd_edel_station_analysis.data_vars["DSN_T_ISBA"] - sd_edel_station_analysis.data_vars[
+        "DSN_T_ISBA"
+    ].mean(dim="member")
+    sigma_ensemble_analysis = np.sqrt(((residuals_ensemble_analysis) ** 2).mean(dim="member")).mean(dim="num_poste")
+
+    fig, ax = plt.subplots(figsize=(15, 2))
+    ax.plot(
+        sigma_ensemble_open_loop.time,
+        sigma_ensemble_open_loop,
+        linewidth=0,
+        marker="o",
+        color=COLORS["edel_ol"],
+        label="open loop",
+    )
+    ax.plot(
+        sigma_ensemble_analysis.time, sigma_ensemble_analysis, linewidth=0, marker="o", color=COLORS["edel_an"], label="assim"
+    )
+    ax.grid()
+    ax.set_title(f"Dispersion - mean on {bdclim.sizes['num_poste']} stations")
+    ax.legend()
+
+    # sigmas = 1 - sigma_ensemble_analysis / sigma_ensemble_open_loop
+    # ax.plot(sigmas.time, sigmas, linewidth=0, marker="s", label="sigmas")
+
     plt.show()
-    # fig, ax = duplicated_particles.sel(time='2021-11-05')
-    # def count_member_occurrences(data: xr.DataArray) -> xr.Dataset:
-    #     return (data == np.arange(17)).sum(dim=("n_points"))
-    # .groupby("member").count(dim="n_poin
-
-    # print(duplicated_particles)
-    # particle_occurrence = duplicated_particles == (duplicated_particles.coords["member"] + 11)
-
-    # # Consider only points where assimilation is possible
-    # fsc_edel_openloop = dickinson(edelweiss_openloop).stack(points=("y", "x")).sel(time=period)
-    # # fig, ax = plt.subplots()
-    # # (
-    # #     (dickinson(edelweiss_openloop.data_vars["DSN_T_ISBA"]).sel(time="2022-01-15") == 1).all(dim="member")
-    # #     + (dickinson(edelweiss_openloop.data_vars["DSN_T_ISBA"]).sel(time="2022-01-15") == 0).all(dim="member")
-    # # ).plot.imshow(ax=ax)
-    # # plt.show()
-    # # (fsc_edel_openloop == 0).all(dim="member")
-    # fsc_edel_openloop = fsc_edel_openloop.assign_coords(n_points=("points", np.arange(fsc_edel_openloop.sizes["points"])))
-    # fsc_edel_openloop = fsc_edel_openloop.swap_dims({"points": "n_points"})
-    # # print((fsc_edel_openloop == 1).all(dim="member") + (fsc_edel_openloop == 0).all(dim="member"))
-    # constant_ensemble_mask = (fsc_edel_openloop == 0).all(dim="member") + (fsc_edel_openloop == 1).all(dim="member")
-    # constant_ensemble_mask = (constant_ensemble_mask.data_vars["DSN_T_ISBA"]).sel(
-    #     time=duplicated_particles.time, method="nearest"
-    # )
-    # constant_ensemble_mask = constant_ensemble_mask.assign_coords({"time": duplicated_particles.time})
-
-    # # print(viirs.sel(time="2021-12-15").data_vars["snow_cover_fraction"].values)
-    # cloud_mask = np.isnan(viirs)
-    # cloud_mask = cloud_mask.stack(points=("y", "x")).sel(time=period)
-    # cloud_mask = cloud_mask.assign_coords(n_points=("points", np.arange(cloud_mask.sizes["points"])))
-    # cloud_mask = cloud_mask.swap_dims({"points": "n_points"})
-    # cloud_mask = (cloud_mask.data_vars["snow_cover_fraction"]).sel(time=duplicated_particles.time, method="nearest")
-    # cloud_mask = cloud_mask.assign_coords({"time": duplicated_particles.time})
-    # # no_assim_points_mask.s
-    # # print(duplicated_particles)
-    # no_assim_mask = cloud_mask + constant_ensemble_mask
-    # # duplicated_particles_assim = duplicated_particles
-
-    # # print(duplicated_particles_assim)
-    # # print(duplicated_particles_assim)
-    # # duplicated_particles_assim = duplicated_particles.copy(deep=True)
-    # # duplicated_particles_assim = [1 - no_assim_points_mask.data_vars["DSN_T_ISBA"]]
-    # # print(duplicated_particles_assim)
-    # particle_occurrence = xr.DataArray(
-    #     np.nan,
-    #     dims=("member", "time", "n_points"),
-    #     coords=duplicated_particles.coords,
-    # )
-    # for mb in duplicated_particles.coords["member"]:
-    #     n = (duplicated_particles == mb + 1).sum(dim=("member"))
-    #     particle_occurrence[dict(member=mb)] = n
-
-    # # print((particle_occurrence / (14443)).sum(dim="member"))
-    # # fig, ax = plt.subplots()
-    # # ax.imshow(effective_sample_size_xarray(weights=particle_occurrence / (14443 * 17)).values.reshape(101, 143))
-    # pseudoweights = particle_occurrence / duplicated_particles.sizes["member"]
-    # print(pseudoweights)
-    # # print(no_assim_points_mask)
-    # # print(pseudoweights)
-    # effective_sample_size = effective_sample_size_xarray(weights=pseudoweights)
-    # print(effective_sample_size.where(1 - no_assim_mask).mean(dim=("n_points")))
-
-    # effective_sample_size.plot.line(ax=ax)
-
-    # plt.show()

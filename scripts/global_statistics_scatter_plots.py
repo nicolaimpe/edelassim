@@ -35,7 +35,7 @@ if __name__ == "__main__":
     grouped_dataset_binned = grouped_dataset.groupby(
         pleiades=bins, member=UniqueGrouper(edelweiss_openloop.sel(member=slice(0, None)).coords["member"])
     ).mean()
-    xaxis_data = grouped_dataset.data_vars["pleiades"].mean(dim="member").values.flatten()
+    xaxis_data = grouped_dataset_binned.data_vars["pleiades"].mean(dim="member").values.flatten()
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=xaxis_data, ax=ax)
     ax.plot([0, 3], [0, 3], color="black", linestyle="dashed")
     ax.set_title(f"Edelweiss vs Pleiades - {snow_depth_bin} m bins")
@@ -57,10 +57,10 @@ if __name__ == "__main__":
     grouped_dataset_binned = grouped_dataset.groupby(
         bdclim=bins, member=UniqueGrouper(edelweiss_openloop.sel(member=slice(0, None)).coords["member"])
     ).mean()
-    xaxis_data = grouped_dataset.data_vars["bdclim"].mean(dim="member").values.flatten()
+    xaxis_data = grouped_dataset_binned.data_vars["bdclim"].mean(dim="member").values.flatten()
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=xaxis_data, ax=ax)
     ax.plot([0, 3], [0, 3], color="black", linestyle="dashed")
-    ax.set_title(f"Edelweiss vs In sity - {snow_depth_bin} m bins")
+    ax.set_title(f"Edelweiss vs In situ - {snow_depth_bin} m bins")
     ax.set_xlabel("In situ SD [m]")
     ax.set_ylabel("Edelweiss SD [m]")
     ax.grid()
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     grouped_dataset_binned = grouped_dataset.groupby(
         elevation=altitude_bins, member=UniqueGrouper(edelweiss_openloop.sel(member=slice(0, None)).coords["member"])
     ).mean()
-    xaxis_data = grouped_dataset.data_vars["bdclim"].mean(dim="member").values.flatten()
+    xaxis_data = grouped_dataset_binned.data_vars["elevation"].mean(dim="member").values.flatten()
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=xaxis_data, ax=ax)
     ax.plot(
         grouped_dataset_binned.data_vars["elevation"].mean(dim="member").values.flatten(),
