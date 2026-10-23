@@ -3,10 +3,15 @@ from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from pyproj import CRS
 
 from edelassim.bdclim import find_station_locations
-from edelassim.observations import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
+from edelassim.observations import (
+    find_clear_dates_s2,
+    find_clear_dates_viirs,
+    valid_snow_cover_fraction_s2,
+    valid_snow_cover_fraction_viirs_mf,
+)
 
 # Snowline plots
-LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "Edelweiss OL", "edel_an": "Edelweiss assim"}
+LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "OL", "edel_an": "Assim"}
 COLORS = {"s2": "black", "viirs": "red", "edel_ol": "blue", "edel_an": "magenta"}
 
 
@@ -38,6 +43,10 @@ glacier_mask_path = f"{landcover_folder}/glacier_mask/glacier_mask_glims_2022_gr
 glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
 forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
 mask = glacier_mask + forest_mask
+mask_20m = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154)).rio.reproject_match(xr.open_dataset(s2_path))
+
+good_dates_viirs = find_clear_dates_viirs(xr.open_dataset(viirs_file).data_vars["snow_cover_fraction"].where(1 - mask))
+good_dates_s2 = find_clear_dates_s2(xr.open_dataset(s2_path).data_vars["snow_cover_fraction"].where(1 - mask_20m))
 
 
 def get_spatial_datasets(actual_xpid: str) -> tuple[xr.Dataset, ...]:
@@ -48,7 +57,7 @@ def get_spatial_datasets(actual_xpid: str) -> tuple[xr.Dataset, ...]:
     # dem = xr.open_dataarray(dem_file)
 
     s2 = xr.open_dataset(s2_path)
-    mask_20m = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154)).rio.reproject_match(s2)
+
     s2 = valid_snow_cover_fraction_s2(s2.where(1 - mask_20m))
     pleiades = xr.open_dataset(pleiades_path)
     bdclim = xr.open_dataset(bdclim_filepath)

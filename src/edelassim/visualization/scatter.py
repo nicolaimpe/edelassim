@@ -47,15 +47,15 @@ def boxplot_logit_plot(
     bp["boxes"][0].set_facecolor(kwargs["color"])
 
 
-def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, ax: Axes):
+def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, ax: Axes, plot_ref: bool = True):
     # Should fix this member mean of Pleiades
     qmin, qmax = 0.1, 0.9
     median_openloop = grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten()
     median_analysis = grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten()
-    reference = grouped_dataset.data_vars["reference"].mean(dim="member").values.flatten()
+    reference = grouped_dataset.data_vars["reference"].values.flatten()
 
-    rmse_openloop = compute_rmse(median_openloop - reference)
-    rmse_analysis = compute_rmse(median_analysis - reference)
+    # rmse_openloop = compute_rmse(median_openloop - reference)
+    # rmse_analysis = compute_rmse(median_analysis - reference)
     ax.fill_between(
         x_axis_data,
         grouped_dataset.data_vars["open_loop"].quantile(qmin, dim="member").values.flatten(),
@@ -71,9 +71,10 @@ def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, 
         color=COLORS["edel_ol"],
         linewidth=2,
         linestyle="dashed",
-        label=f"{LABELS['edel_ol']} median, RMSE={rmse_openloop:.2f}",
+        label=f"{LABELS['edel_ol']} median",
     )
-    ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="In situ")
+    if plot_ref:
+        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="In situ")
     ax.fill_between(
         x_axis_data,
         grouped_dataset.data_vars["analysis"].quantile(qmin, dim="member").values.flatten(),
@@ -87,7 +88,7 @@ def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, 
         x_axis_data,
         median_analysis,
         color=COLORS["edel_an"],
-        label=f"{LABELS['edel_an']} median, RMSE={rmse_analysis:.2f}",
+        label=f"{LABELS['edel_an']} median",
         linewidth=2,
         linestyle="dashed",
     )

@@ -14,12 +14,7 @@ from sklearn.metrics import mean_squared_error
 from edelassim.bdclim import find_station_imshow_location, find_station_locations
 from edelassim.evaluations import compute_rmse
 from edelassim.observation_operators import dickinson
-from edelassim.observations import (
-    find_clear_dates_s2,
-    find_clear_dates_viirs,
-    valid_snow_cover_fraction_s2,
-    valid_snow_cover_fraction_viirs_mf,
-)
+from edelassim.observations import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
 from edelassim.snowlines import find_forcing_snowrain_line, find_snowline_from_snow_penalization
 from edelassim.visualization.interactive_plots import InteractiveSeasonExploreButtons
 from edelassim.visualization.polar import plot_polar_envelop_member, plot_snowline_polarplot, set_polarplot
@@ -31,7 +26,7 @@ from edelassim.visualization.spatial import (
     SNOW_DEPTH_CMAP,
     add_2d_plot,
 )
-from edelassim.visualization.static_files import COLORS, LABELS
+from edelassim.visualization.static_files import COLORS, LABELS, good_dates_s2, good_dates_viirs
 from edelassim.visualization.time_series import plot_ensemble_time_series
 
 
@@ -409,7 +404,7 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover05_wy2122_d93_50cm"
     working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
     observation_folder = f"{working_folder}/observations/grandesrousses250m"
     simulation_folder = f"{working_folder}/simulations/postprocess"
@@ -494,9 +489,6 @@ if __name__ == "__main__":
     bdclim = xr.open_dataarray(bdclim_filepath).sel(time=slice(start_time, end_time))
     x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim)
     pleiades = (xr.open_dataset(pleiades_path).where(1 - mask).sel(time=slice(start_time, end_time))).data_vars["snow_depth"]
-
-    good_dates_s2 = find_clear_dates_s2(snow_cover_s2=snow_cover_s2)
-    good_dates_viirs = find_clear_dates_viirs(snow_cover_viirs=snow_cover_viirs)
 
     # values for observation operator values
     # b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray

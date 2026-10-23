@@ -8,35 +8,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from matplotlib.axes import Axes
-from matplotlib.gridspec import GridSpec
-from pyproj import Transformer
-from snowtools.scores.ensemble import EnsembleScores
+from xarray.groupers import BinGrouper, UniqueGrouper
 
-from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset, filter_discontinuous_stations, find_station_locations
-from edelassim.evaluations import compute_scores_grouped_data
-from edelassim.filter import effective_sample_size_xarray
-from edelassim.observation_operators import dickinson
-from edelassim.observations import EdelweissGrandesRoussesGrid, find_clear_dates_s2, find_clear_dates_viirs
-from edelassim.postprocess_surfex.soda import (
-    alpha_multiple_assimilation,
-    alpha_to_grid,
-    duplicated_particles_multiple_assimilation,
-    duplicated_particles_to_grid,
-)
-from edelassim.visualization.scatter import plot_ensemble_envelop
+from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset
+from edelassim.evaluations import compute_scores_grouped_data_spatial
+from edelassim.postprocess_surfex.soda import duplicated_particles_multiple_assimilation
 from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, mask, working_folder
-
-
-def compute_rsquare(data: xr.Dataset) -> xr.DataArray:
-
-    r2_open_loop = EnsembleScores(
-        timeObs=None, timeSim=None, obs=data.data_vars["reference"].values, ensemble=data.data_vars["open_loop"].values
-    ).CRPS()
-    r2_analysis = EnsembleScores(
-        timeObs=None, timeSim=None, obs=data.data_vars["reference"].values, ensemble=data.data_vars["analysis"].values
-    ).CRPS()
-
-    return xr.DataArray(r2_analysis - r2_open_loop)
 
 
 def postprocess_scores(scores: xr.Dataset, bdclim: xr.Dataset) -> xr.Dataset:
@@ -226,13 +203,6 @@ if __name__ == "__main__":
         coords=sd_edel_station_analysis.coords,
     )
 
-    # scores_sd = grouped_dataset.groupby(("num_poste", "time")).map(compute_scores_grouped_data)
-    # scores_sd = xr.open_dataset("scores_sd.nc")
-    # scores_fsc = dickinson(grouped_dataset).groupby(("num_poste", "time")).map(compute_scores_grouped_data)
-    # scores_fsc.to_netcdf("scores_fsc.nc")
-    # combined = xr.concat([scores_sd, scores_fsc], dim="variable")
-    # combined = combined.assign_coords(dict(variable=["snow_depth", "fractional_snow_cover"]))
-
     scores = xr.open_dataset("../output_folder/scores_2021_2022.nc")
     scores = scores.assign_coords(dict(variable=["snow_depth", "fractional_snow_cover"]))
 
@@ -294,6 +264,12 @@ if __name__ == "__main__":
 
     ################ VIIRS J+1 as reference - altitude bins 100m
 
+    altitude_bins = BinGrouper(np.arange(700, 3500, 100))
+    ds = grouped_dataset.groupby(elevation=altitude_bins, time=UniqueGrouper()).map(compute_scores_grouped_data_spatial)
+    ds.assign_coords(elevation_min=("elevation_bins", [b.left for b in ds.elevation_bins.values])).swap_dims(
+        {"elevation_bins": "elevation_min"}
+    ).drop_vars("elevation_bins").to_netcdf("../output_folder/edel_viirs_scores.nc")
+
     scores = xr.open_dataset("../output_folder/edel_viirs_scores.nc")
     score = "MAE open loop - MAE analysis"
     scores = np.abs(scores.data_vars["mae"].sel(type="open_loop")) - np.abs(scores.data_vars["mae"].sel(type="analysis"))
@@ -302,29 +278,3 @@ if __name__ == "__main__":
     ax.set_title(f"Edelweiss vs VIIRS FSC (J+1 not assimilated) - {score}")
 
     plt.show()
-
-    # scores_fsc = dickinson(grouped_dataset).groupby(("num_poste", "time")).map(compute_scores_grouped_data)
-    # postprocess_scores(scores_fsc, bdclim).to_netcdf("scores_fsc.nc")
-    # scores_sd = xr.open_dataset("scores.nc")
-    # scores_fsc = xr.open_dataset("scores_fsc.nc")
-    # # fig, (ax_sd, ax_fsc) = plt.subplots(nrows=2, ncols=1, figsize=(14, 8))
-
-    # fig, ax = plt.subplots(figsize=(18, 5))
-
-    # top = matplotlib.colormaps["Reds_r"].resampled(128)
-    # bottom = matplotlib.colormaps["Greens"].resampled(128)
-    # newcolors = np.vstack((top(np.linspace(0, 1, 128)), bottom(np.linspace(0, 1, 128))))
-    # newcmp = colors.ListedColormap(newcolors, name="RdGn")
-
-    # # colors.Colorm
-    # # colormap = cm.RdYlGn
-    # norm = colors.Normalize(vmin=-0.5, vmax=0.5)
-
-    # scores = xr.open_dataset("../scripts/scores_fsc.nc")
-    # scores = scores.sel(num_poste=scores.num_poste[scores.Station_Name != "BESSE"], drop=True)
-    # scores = scores.sel(num_poste=scores.num_poste[scores.Station_Name != "Les 2 ALpes Jandri"], drop=True)
-    # # scores = scores.sel(num_poste=scores.num_poste[stations!='BESSE'], drop=True)
-    # # scores = scores.where([stations!='Besse'])
-    # score = "maes"
-
-    # plt.show()

@@ -5,7 +5,14 @@ import xarray as xr
 
 from edelassim.observation_operators import dickinson
 from edelassim.visualization.spatial import SNOW_DEPTH_CMAP, add_2d_plot
-from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, topography_data_folder
+from edelassim.visualization.static_files import (
+    COLORS,
+    LABELS,
+    get_spatial_datasets,
+    good_dates_s2,
+    good_dates_viirs,
+    topography_data_folder,
+)
 
 if __name__ == "__main__":
     xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
