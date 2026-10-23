@@ -1,12 +1,14 @@
 import glob
 import logging
 import os
+from datetime import timedelta
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinner, MountainBinnerConfig
 
-from edelassim.postprocess_surfex.pro import append_average_member_value
+from edelassim.postprocess_surfex.pro import append_average_member_value, append_median_member_value
 from edelassim.snowlines import compute_forcing_snowline_parametrization, create_semidistributed_bins
 
 logger = logging.getLogger("logger")
@@ -32,6 +34,8 @@ if __name__ == "__main__":
     total_rainfall = forcing.data_vars["Rainf"].resample(time="D").sum()
     total_snowfall = append_average_member_value(total_snowfall)
     total_rainfall = append_average_member_value(total_rainfall)
+    total_snowfall = append_median_member_value(total_snowfall)
+    total_rainfall = append_median_member_value(total_rainfall)
     total_precip = total_snowfall + total_rainfall
     phase = xr.Dataset({"phase": (total_snowfall - total_rainfall) / total_precip})
 
@@ -42,6 +46,8 @@ if __name__ == "__main__":
             "phase": phase.data_vars["phase"],
         }
     )
+    new_time = [pd.Timestamp(t) + timedelta(hours=12) for t in forcing_processed_spatial_dataset.coords["time"].values]
+    forcing_processed_spatial_dataset = forcing_processed_spatial_dataset.assign_coords({"time": new_time})
     forcing.close()
     forcing_processed_spatial_dataset.to_netcdf(f"{output_folder}/spatial.nc")
 

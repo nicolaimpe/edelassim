@@ -56,7 +56,7 @@ def decorate_boxplot(fig: Figure, ax: Axes, xticks: list, xticks_labels: list) -
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticks_labels)
     ax.set_ylabel("SD [m]")
-    fig.legend(handles=custom_leg, bbox_to_anchor=(1.1, 0.6))
+    fig.legend(handles=custom_leg)
     ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1], linewidth=2, color="black", linestyles="dashed")
 
 
@@ -84,7 +84,7 @@ def assign_month(data: xr.Dataset) -> xr.Dataset:
 
 if __name__ == "__main__":
     xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
-    period = slice("2021-11", "2022-07")
+    period = slice("2021-11", "2022-05")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
 
     ### Station plots
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     ## Altitude boxplot
     bdclim_alt_step = 500
-    bins = BinGrouper(np.arange(1000, 3501, bdclim_alt_step), labels=np.arange(1000, 3500, bdclim_alt_step))
+    bins = BinGrouper(np.arange(500, 3501, bdclim_alt_step), labels=np.arange(500, 3500, bdclim_alt_step))
     grouped_dataset_altitude_coord = grouped_dataset.groupby(ZS=bins).map(
         assign_altitude_bin_insitu, altitude_step=bdclim_alt_step
     )
@@ -131,16 +131,18 @@ if __name__ == "__main__":
     grouped_dataset_altitude_coord.groupby("altitude_bin").map(plot_var_boxplot_array, ax=ax, var="altitude_bin")
 
     ax.set_title("Altitude band snow depth residuals Edelweiss vs in situ - ensemble median")
-    xticks = list(set(grouped_dataset_altitude_coord.coords["altitude_bin"].values))
+    xticks = (ax.get_xticks()[::2] + ax.get_xticks()[1::2]) / 2
     counter = Counter(grouped_dataset_altitude_coord.coords["altitude_bin"].values)
     xticks_labels = [
-        f"{bin_label} - {bin_label + bdclim_alt_step} \n n= {counter[bin_idx]} stations"
+        f"{bin_label} - {bin_label + bdclim_alt_step} \n n= {counter[xticks[bin_idx]]} stations"
         for bin_idx, bin_label in enumerate(bins.labels)
     ]
     decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
 
     ### Pleiades boxplots
+
     pleiades = pleiades.sel(time=period).sel(band=1)
+
     residuals_pleiades_openloop = (
         edelweiss_openloop.data_vars["DSN_T_ISBA"].sel(member=-1, time=pleiades.coords["time"])
         - pleiades.data_vars["snow_depth"]
@@ -161,7 +163,7 @@ if __name__ == "__main__":
             ).sel(band=1),
         }
     )
-    bins = BinGrouper(np.arange(400, 3401, pleiades_alt_step), labels=np.arange(400, 3400, pleiades_alt_step))
+    bins = BinGrouper(np.arange(1000, 3401, pleiades_alt_step), labels=np.arange(1000, 3400, pleiades_alt_step))
     fig, ax = plt.subplots(figsize=(15, 5))
 
     grouped_dataset_altitude_coord = grouped_dataset.groupby(altitude=bins).map(
@@ -170,13 +172,16 @@ if __name__ == "__main__":
     grouped_dataset_altitude_coord.groupby("altitude_bin").map(plot_var_boxplot_array, ax=ax, var="altitude_bin")
 
     ax.set_title("Altitude band snow depth residuals Edelweiss vs Pleiades - ensemble median")
-    xticks = np.array(list(set(grouped_dataset_altitude_coord.coords["altitude_bin"].values.flatten())))
-    xticks = xticks[~np.isnan(xticks)]
+
+    # xticks = xticks[~np.isnan(xticks)]
+    xticks = (ax.get_xticks()[::2] + ax.get_xticks()[1::2]) / 2
     counter = Counter(grouped_dataset_altitude_coord.coords["altitude_bin"].values.flatten())
     xticks_labels = [
-        f"{bin_label} - {bin_label + pleiades_alt_step} \n n= {counter[bin_idx]} points"
-        for bin_idx, bin_label in enumerate(bins.labels)
+        f"{bin_label} - {bin_label + pleiades_alt_step} \n n= {counter[xticks[bin_idx]]} points"
+        for bin_idx, bin_label in enumerate(bins.bins)
     ]
+    # print(xticks)
+    # print(xticks_labels)
 
     decorate_boxplot(fig=fig, ax=ax, xticks=xticks, xticks_labels=xticks_labels)
 
@@ -211,7 +216,6 @@ if __name__ == "__main__":
     )
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    plt.rcParams["font.size"] = 14
     grouped_dataset_time_coord = grouped_dataset.assign_coords(time_bin=("time", np.arange(grouped_dataset.sizes["time"])))
     grouped_dataset_time_coord.groupby("time_bin").map(plot_var_boxplot_array, ax=ax, var="time_bin", width=0.25)
     ax.set_title("Time snow depth residuals Edelweiss vs Pleiades - ensemble median")

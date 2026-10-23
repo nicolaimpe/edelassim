@@ -14,7 +14,6 @@ def find_station_locations(bdclim_dataset: xr.Dataset) -> tuple[np.ndarray, np.n
 
 def filter_discontinuous_stations(bdclim_dataset: xr.Dataset) -> xr.Dataset:
     discontinuos_station_mask = (np.isnan(bdclim_dataset.data_vars["neigetotx"])).any(dim="time")
-    print(discontinuos_station_mask)
     return bdclim_dataset.where(1 - discontinuos_station_mask, drop=True)
 
 

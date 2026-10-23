@@ -1,14 +1,10 @@
 # Preprocess simulation output (assimilation of snow depth in this case)
 
 import glob
-import logging
-from datetime import timedelta
 
-import numpy as np
 import pandas as pd
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinnerConfig
-from pandas import date_range
 from pyproj import CRS
 
 from edelassim.observation_operators import dickinson
@@ -25,7 +21,8 @@ def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> x
             sorted(glob.glob(f"{member_folder}/offline/pro/*.nc")), concat_dim="time", combine="nested"
         )
 
-        member_all_period = member_all_period.resample(time="1d").nearest()
+        midday_mask = member_all_period.coords["time"].dt.hour == 12
+        member_all_period = member_all_period.sel(time=midday_mask)
         member_simulations.append(member_all_period)
         member_numbers.append(int(member_folder.split("/")[-1][2:]))
     all_edel = xr.concat(member_simulations, dim=pd.Index(member_numbers, name="member"), coords="all")

@@ -54,15 +54,13 @@ if __name__ == "__main__":
     topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/"
     output_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/{vconf}/{xpid}"
     forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/"
-
     # ######### EDELWEISS Regrid and compute mean member
-    logger.info("Edelweiss postprocessing - regridding")
-    snow_depth_edelweiss = postprocess_pro(simulation_folder=simulation_folder, output_file=None)
-    snow_depth_edelweiss = append_median_member_value(snow_depth_edelweiss)
-    snow_depth_edelweiss = append_average_member_value(snow_depth_edelweiss)
-    snow_depth_edelweiss.to_netcdf(f"{output_folder}/spatial.nc")
+    # logger.info("Edelweiss postprocessing - regridding")
+    # snow_depth_edelweiss = postprocess_pro(simulation_folder=simulation_folder, output_file=None)
+    # snow_depth_edelweiss = append_median_member_value(snow_depth_edelweiss)
+    # snow_depth_edelweiss = append_average_member_value(snow_depth_edelweiss)
+    # snow_depth_edelweiss.to_netcdf(f"{output_folder}/spatial.nc")
 
-    
     # ############ EDELWEISS snowline
     logger.info("Edelweiss postprocessing - snowline calculation")
     # Corresponding for inf, 0.7, 0.5, 0.3, 0.1 m of snow height for 100% snow cover and b=0.11
@@ -87,9 +85,9 @@ if __name__ == "__main__":
     # edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
     # edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
 
-    edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
-        f"{output_folder}/snowline_parametrization.nc"
-    )
+    # edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
+    #     f"{output_folder}/snowline_parametrization.nc"
+    # )
     ############ Focing analysis
     # Swap forcing memmbers in assimilation window using PART file
     logger.info(

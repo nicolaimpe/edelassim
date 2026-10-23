@@ -94,7 +94,7 @@ def find_clear_dates_viirs(snow_cover_viirs: xr.DataArray):
     n_data_pixel = snow_cover_viirs.count(dim=("x", "y"))
 
     # cloud_mask_viirs = np.isnan(snow_cover_viirs)
-    cloud_flag_viirs = (n_data_pixel / (snow_cover_viirs.sizes["x"] * snow_cover_viirs.sizes["y"])) < 0.50
+    cloud_flag_viirs = (n_data_pixel / (snow_cover_viirs.sizes["x"] * snow_cover_viirs.sizes["y"])) < 0.3
     good_dates_viirs = cloud_flag_viirs.where(cloud_flag_viirs == 0, drop=True).time.values
     good_dates_viirs = [date.astype("M8[ms]").astype("O") for date in good_dates_viirs]
 

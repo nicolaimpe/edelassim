@@ -3,7 +3,8 @@ import logging
 import xarray as xr
 from mountain_data_binner.mountain_binner import MountainBinnerConfig
 
-from edelassim.snowlines import SnowCoverFractionToSnowline, valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
+from edelassim.observations import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
+from edelassim.snowlines import SnowCoverFractionToSnowline
 
 # Module configuration
 logger = logging.getLogger("logger")
@@ -18,20 +19,20 @@ if __name__ == "__main__":
 
     sensor = ("S2", "VIIRS")
     #################################### Sentinel-2 snowline ####################################
-    if "S2" in sensor:
-        logger.info("Sentinel-2 snowline calculation")
+    # if "S2" in sensor:
+    #     logger.info("Sentinel-2 snowline calculation")
 
-        dem_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
-        slope_filepath = f"{topography_data_folder}/20m/SLP_GR_UTM_20m.tif"
-        aspect_filepath = f"{topography_data_folder}/20m/ASP_GR_UTM_20m.tif"
+    #     dem_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
+    #     slope_filepath = f"{topography_data_folder}/20m/SLP_GR_UTM_20m.tif"
+    #     aspect_filepath = f"{topography_data_folder}/20m/ASP_GR_UTM_20m.tif"
 
-        sentinel2_image = xr.open_dataset(f"{s2_folder}/spatial.nc").drop_vars("spatial_ref")
-        snowline_calculator = SnowCoverFractionToSnowline(
-            fsc_image=valid_snow_cover_fraction_s2(sentinel2_image),
-            mnt_data_paths=MountainBinnerConfig(
-                slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
-            ),
-        )
+    #     sentinel2_image = xr.open_dataset(f"{s2_folder}/spatial.nc").drop_vars("spatial_ref")
+    #     snowline_calculator = SnowCoverFractionToSnowline(
+    #         fsc_image=valid_snow_cover_fraction_s2(sentinel2_image),
+    #         mnt_data_paths=MountainBinnerConfig(
+    #             slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
+    #         ),
+    #     )
 
     #################################### VIIRS snowline ####################################
     if "VIIRS" in sensor:
@@ -48,6 +49,6 @@ if __name__ == "__main__":
                 slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
             ),
         )
-        snowline_calculator.transform(export_path=f"{viirs_folder}/snowline_paremetrization.nc")
+        snowline_calculator.transform(export_path=f"{viirs_folder}/snowline_parametrization.nc")
 
-    snowline_calculator.transform(export_path=f"{s2_folder}/snowline_paremetrization.nc")
+    snowline_calculator.transform(export_path=f"{s2_folder}/snowline_parametrization.nc")

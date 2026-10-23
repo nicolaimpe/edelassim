@@ -37,11 +37,11 @@ def local_particle_filter(y: np.ndarray, y_hat: np.ndarray, inv_R_trace: np.ndar
     return new_weights
 
 
-def effective_weights_xarray(weights: xr.DataArray):
-    return 1 / (weights**2).sum(dim="member")
+def effective_sample_size_xarray(weights: xr.DataArray):
+    return 1 / (weights**2).sum(dim="member", skipna=True)
 
 
-def effective_weights(weights: np.ndarray):
+def effective_sample_size(weights: np.ndarray):
     return 1 / np.sum(weights**2, axis=0)
 
 
@@ -164,7 +164,7 @@ class PointParticleFilter(SIRParticleFilter):
 
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         alpha = np.ones_like(inv_R_trace)
-        old_n_eff = effective_weights(old_weights)
+        old_n_eff = effective_sample_size(old_weights)
         degenerated_mask = old_n_eff < self.min_n_eff
 
         iterations = 1
@@ -183,7 +183,7 @@ class PointParticleFilter(SIRParticleFilter):
                 inv_R_trace=inv_R_trace[degenerated_mask] * alpha[degenerated_mask],
             )
             weights[:, degenerated_mask] = new_weights
-            n_eff[degenerated_mask] = effective_weights(weights=new_weights)
+            n_eff[degenerated_mask] = effective_sample_size(weights=new_weights)
             degenerated_mask = n_eff < self.min_n_eff
             iterations += 1
             alpha[degenerated_mask] -= inflation_step
@@ -198,7 +198,7 @@ class PointParticleFilter(SIRParticleFilter):
             inv_R_trace=inv_R_trace[degenerated_mask] * alpha[degenerated_mask],
         )
         weights[:, degenerated_mask] = new_weights
-        n_eff[degenerated_mask] = effective_weights(weights=new_weights)
+        n_eff[degenerated_mask] = effective_sample_size(weights=new_weights)
         return weights, alpha
 
     def update_weights(self) -> np.ndarray:
@@ -216,7 +216,7 @@ class PointParticleFilter(SIRParticleFilter):
         inv_R_trace = np.diag(self.assimilation_problem.inverse_observation_error_covariance_matrix)
         new_weights = point_particle_filter(y=y, y_hat=y_hat, inv_R_trace=inv_R_trace)
         # df = pd.DataFrame(new_weights).T.to_csv("weights_20220226_no_inflation.csv")
-        n_eff = effective_weights(weights=new_weights)
+        n_eff = effective_sample_size(weights=new_weights)
         # print(n_eff[:100] < self.min_n_eff)
         # print(np.any(n_eff < self.min_n_eff))
         if self.inflation and np.any(n_eff < self.min_n_eff):

@@ -24,7 +24,7 @@ edelweiss_openloop_file = f"{edelweiss_openloop_folder}/spatial.nc"
 edelweiss_analysis_file = f"{edelweiss_analysis_folder}/spatial.nc"
 viirs_file = f"{observation_folder}/meteofrance/spatial.nc"
 s2_path = f"{observation_folder}/s2/spatial.nc"
-bdclim_filepath = f"{observation_folder}/bdclim/bdclim.nc"
+bdclim_filepath = f"{observation_folder}/bdclim/snow_depth_daily_avg.nc"
 pleiades_path = f"{observation_folder}/pleiades_grandesrousses_all.nc"
 
 s2_snowline_path = f"{observation_folder}/s2/snowline_parametrization.nc"

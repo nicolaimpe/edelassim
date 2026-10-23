@@ -60,7 +60,7 @@ def change_month(delta: int):
     # Handle day overflow (e.g., Jan 31 -> Feb)
     last_day = calendar.monthrange(year, month)[1]
     day = min(current_date.day, last_day)
-    current_date = datetime(year, month, day)
+    current_date = datetime(year, month, day, hour=12)
     update_all_plots()
 
 
@@ -152,7 +152,7 @@ def update_spatial_plots():
     sd_data = snow_depth_edel_ol_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_data, ax_edel_ol_sd, dem_250m, "Edelweiss OL SD[m]", cmap=SNOW_DEPTH_CMAP, vmin=1e-3)
 
-    fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=0.11, b=current_b)
+    fsc_edel = dickinson(sd=snow_depth_edel_ol_ds.sel(time=current_date, member=current_member), a=0.11)
     add_2d_plot(fsc_edel, ax_edel_ol_fsc, dem_250m, "Edelweiss OL FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
     add_2d_plot(
@@ -169,7 +169,7 @@ def update_spatial_plots():
     sd_data = snow_depth_edel_an_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_data, ax_edel_an_sd, dem_250m, "Edelweiss assim SD [m]", cmap=SNOW_DEPTH_CMAP)  # , vmin=0.001, vmax=2.5)
 
-    fsc_edel = dickinson(sd=snow_depth_edel_an_ds.sel(time=current_date, member=current_member), b=current_b, a=0.11)
+    fsc_edel = dickinson(sd=snow_depth_edel_an_ds.sel(time=current_date, member=current_member), a=0.11)
     add_2d_plot(fsc_edel, ax_edel_an_fsc, dem_250m, "Edelweiss assim FSC [-]", cmap=FSC_CMAP_SNOW_COVER, vmin=0, vmax=1)
     diff_edel_viirs = fsc_edel - snow_cover_viirs.sel(time=current_date)
     add_2d_plot(
@@ -210,7 +210,7 @@ def update_snowline_plots():
     plot_kwargs = {"ax": ax_snowlines}
 
     # Snowline
-    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date, b=current_b))
+    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date))
     plot_polar_envelop_member(current_edel_ol_sl, current_member, COLORS["edel_ol"], LABELS["edel_ol"], **plot_kwargs)
 
     current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date))
@@ -240,7 +240,7 @@ def update_snowline_plots():
     # Snow rain line
     plot_kwargs.update({"ax": ax_snow_rain_line})
 
-    # When at least one of the aspects is not covered by the phase field (-> all aktitudes are NaNs) we do not plot
+    # When at least one of the aspects is not covered by the phase field (-> all altitudes are NaNs) we do not plot
     if not np.any(np.isnan(snow_rain_forcing_ol_ds.sel(time=current_date).data_vars["phase"]).all(dim="altitude_bins")):
         current_forc_ol_srl = find_forcing_snowrain_line(snow_rain_forcing_ol_ds.sel(time=current_date))
         current_forc_an_srl = find_forcing_snowrain_line(snow_rain_forcing_an_ds.sel(time=current_date))
@@ -264,7 +264,7 @@ def update_station_plot():
     # Maps
     sd_edel_data = snow_depth_edel_an_ds.sel(time=current_date, member=current_member)
     add_2d_plot(sd_edel_data, ax_station_map_sd, dem_250m, "Edelweiss assim SD [m]", cmap=SNOW_DEPTH_CMAP)
-    fsc_edel_data = dickinson(sd_edel_data, b=current_b, a=0.11)
+    fsc_edel_data = dickinson(sd_edel_data, a=0.11)
     add_2d_plot(fsc_edel_data, ax_station_map_fsc, dem_250m, "Edelweiss assim FSC [-]", cmap=FSC_CMAP_SNOW_COVER)
     ax_station_map_sd.plot(imshow_locations[:, 0], imshow_locations[:, 1], linewidth=0, marker="*", color="y", picker=5)
 
@@ -280,7 +280,7 @@ def update_station_plot():
     ax_station_time_sd.plot(
         t_coord_bdclim, sd_time_station.values, color="black", linestyle="dashed", linewidth=2, label="in situ"
     )
-    fsc_time_poste = dickinson(sd_time_station, b=current_b, a=0.11)
+    fsc_time_poste = dickinson(sd_time_station, a=0.11)
     ax_station_time_fsc.plot(
         t_coord_bdclim, fsc_time_poste.values, color="black", linestyle="dashed", linewidth=2, label="in situ"
     )
@@ -305,7 +305,7 @@ def update_station_plot():
     fig_stations.text(x=0.3, y=0.37, s=f"RMSE assim - in situ: {compute_rmse(diff_edel_insitu):.2f}")
 
     # FSC Open loop
-    fsc_edel_station_ol = dickinson(sd_edel_station_ol, b=current_b, a=0.11)
+    fsc_edel_station_ol = dickinson(sd_edel_station_ol, a=0.11)
     plot_ensemble_time_series(
         fsc_edel_station_ol,
         mb_to_plot=current_member,
@@ -317,7 +317,7 @@ def update_station_plot():
     fig_stations.text(x=0.15, y=0.06, s=f"RMSE OL - in situ: {compute_rmse(diff_edel_insitu):.2f}")
 
     # FSC Assim
-    fsc_edel_station_an = dickinson(sd_edel_station_an, b=current_b, a=0.11)
+    fsc_edel_station_an = dickinson(sd_edel_station_an, a=0.11)
     plot_ensemble_time_series(
         fsc_edel_station_an,
         mb_to_plot=current_member,
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     viirs_folder = f"{observation_folder}/meteofrance/"
     forcing_ol_folder = f"{working_folder}/forcing/grandesrousses250m/open_loop"
     forcing_analysis_folder = f"{working_folder}/forcing/postprocess/reanalysis/{xpid}/"
-    bdclim_filepath = f"{working_folder}/observations/grandesrousses250m/bdclim/bdclim.nc"
+    bdclim_filepath = f"{working_folder}/observations/grandesrousses250m/bdclim/snow_depth_daily_avg.nc"
     pleiades_path = f"{observation_folder}/pleiades_grandesrousses_all.nc"
 
     topography_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/topography/"
@@ -430,7 +430,7 @@ if __name__ == "__main__":
     dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
 
     # Initial date
-    current_date = datetime(2021, 11, 1)
+    current_date = datetime(2021, 11, 1, hour=12)
     period_length = timedelta(days=30)
     date_end = current_date + period_length
 
@@ -476,10 +476,10 @@ if __name__ == "__main__":
     snow_depth_edel_an_ds = xr.open_dataset(f"{edelweiss_an_folder}/spatial.nc")
     snow_depth_edel_an_ds = snow_depth_edel_an_ds.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
 
-    snowline_s2_ds = xr.open_dataset(f"{s2_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
-    snowline_ol_edel_ds = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
+    snowline_s2_ds = xr.open_dataset(f"{s2_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
+    snowline_ol_edel_ds = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
     snowline_an_edel_ds = xr.open_dataset(f"{edelweiss_an_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
-    snowline_viirs_ds = xr.open_dataset(f"{viirs_folder}/snowline_paremetrization.nc").sel(slope="8 - 30")
+    snowline_viirs_ds = xr.open_dataset(f"{viirs_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
 
     forcing_ol = xr.open_mfdataset(f"{forcing_ol_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
     forcing_an = xr.open_mfdataset(f"{forcing_analysis_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
@@ -502,7 +502,6 @@ if __name__ == "__main__":
     # b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray
     # Initial value for observation operator parametrization
     # current_b = b_values[0]
-    current_b = 1.22
 
     # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray
