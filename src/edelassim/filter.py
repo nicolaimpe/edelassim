@@ -137,7 +137,7 @@ class ParticleFilter(Filter):
 
 
 class SIRParticleFilter(ParticleFilter):
-    """Gordon 1993 bootstrastrap filter with particle duplication"""
+    """Gordon 1993 bootstrastrap filter with prior calculation via forward of particles"""
 
     def __init__(self, assimilation_problem: AssimilationProblem, resampling_algorithm: str):
         super().__init__(assimilation_problem, resampling_algorithm)

@@ -86,7 +86,7 @@ def find_clear_dates_s2(snow_cover_s2: xr.DataArray):
     # Quick criterium to determine whether a Sentinel-2 image is exploitable
     # cloud_flag_s2 = cloud_mask_s2.sum(dim=("x", "y")) / n_data_pixel > 0.3  #| (n_data_pixel / n_pixels_area < 0.5)
     # cloud_flag_s2 = (cloud_mask_s2.sum(dim=("x", "y")) / n_data_pixel > 0.8) | (n_data_pixel / n_pixels_area < 0.3)
-    cloud_flag_s2 = cloud_mask_s2.sum(dim=("x", "y")) / n_pixel_tot > 0.5
+    cloud_flag_s2 = cloud_mask_s2.sum(dim=("x", "y")) / n_pixel_tot > 0.45
     good_dates_s2 = cloud_flag_s2.where(cloud_flag_s2 == 0, drop=True).time.values
     good_dates_s2 = [date.astype("M8[ms]").astype("O") for date in good_dates_s2]
     return good_dates_s2
@@ -95,7 +95,7 @@ def find_clear_dates_s2(snow_cover_s2: xr.DataArray):
 def find_clear_dates_viirs(snow_cover_viirs: xr.DataArray):
     n_data_pixel = snow_cover_viirs.count(dim=("x", "y"))
     cloud_mask_viirs = snow_cover_viirs >= METEOFRANCE_CLASSES["water"]
-    cloud_flag_viirs = cloud_mask_viirs.sum(dim=("x", "y")) / n_data_pixel > 0.5
+    cloud_flag_viirs = cloud_mask_viirs.sum(dim=("x", "y")) / n_data_pixel > 0.45
     good_dates_viirs = cloud_flag_viirs.where(cloud_flag_viirs == 0, drop=True).time.values
     good_dates_viirs = [date.astype("M8[ms]").astype("O") for date in good_dates_viirs]
 

@@ -47,7 +47,7 @@ logging.basicConfig(level=logging.INFO)
 # wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PRO*"
 # wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PART*"
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_test_python_particle_filter"
     vconf = "reanalysis"
 
     simulation_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/{vconf}/{xpid}"
@@ -55,11 +55,11 @@ if __name__ == "__main__":
     output_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/{vconf}/{xpid}"
     forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/"
     # ######### EDELWEISS Regrid and compute mean member
-    # logger.info("Edelweiss postprocessing - regridding")
-    # snow_depth_edelweiss = postprocess_pro(simulation_folder=simulation_folder, output_file=None)
-    # snow_depth_edelweiss = append_median_member_value(snow_depth_edelweiss)
-    # snow_depth_edelweiss = append_average_member_value(snow_depth_edelweiss)
-    # snow_depth_edelweiss.to_netcdf(f"{output_folder}/spatial.nc")
+    logger.info("Edelweiss postprocessing - regridding")
+    snow_depth_edelweiss = postprocess_pro(simulation_folder=simulation_folder, output_file=None)
+    snow_depth_edelweiss = append_median_member_value(snow_depth_edelweiss)
+    snow_depth_edelweiss = append_average_member_value(snow_depth_edelweiss)
+    snow_depth_edelweiss.to_netcdf(f"{output_folder}/spatial.nc")
 
     # ############ EDELWEISS snowline
     logger.info("Edelweiss postprocessing - snowline calculation")
@@ -73,21 +73,21 @@ if __name__ == "__main__":
 
     edelweiss_snowline_list = []
 
-    # # logger.info("Edelweiss snowline calculation")
+    # logger.info("Edelweiss snowline calculation")
     topography_paths = MountainBinnerConfig(
         slope_map_path=slope_filepath, aspect_map_path=aspect_filepath, dem_path=dem_filepath
     )
     # for param_b in obs_oper_param_list:
     # logger.info(f"b = {param_b}")
-    # b_snowline = edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths)
-    # edelweiss_snowline_list.append(b_snowline)
+    b_snowline = edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths)
+    edelweiss_snowline_list.append(b_snowline)
 
-    # edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
-    # edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
+    edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
+    edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
 
-    # edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
-    #     f"{output_folder}/snowline_parametrization.nc"
-    # )
+    edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
+        f"{output_folder}/snowline_parametrization.nc"
+    )
     ############ Focing analysis
     # Swap forcing memmbers in assimilation window using PART file
     logger.info(
