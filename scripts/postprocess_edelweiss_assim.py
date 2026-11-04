@@ -47,7 +47,7 @@ logging.basicConfig(level=logging.INFO)
 # wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PRO*"
 # wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PART*"
 if __name__ == "__main__":
-    xpid = "assim_viirs_test_python_particle_filter"
+    xpid = "assim_viirs_cloudcover055_wy2122_soda_dev"
     vconf = "reanalysis"
 
     simulation_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/{vconf}/{xpid}"
@@ -79,11 +79,6 @@ if __name__ == "__main__":
     )
     # for param_b in obs_oper_param_list:
     # logger.info(f"b = {param_b}")
-    b_snowline = edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths)
-    edelweiss_snowline_list.append(b_snowline)
-
-    edelweiss_snowline = xr.concat(objs=edelweiss_snowline_list, dim="b")
-    edelweiss_snowline.to_netcdf(f"{output_folder}/snowline_paremetrization.nc")
 
     edel_to_snowline(snow_depth_data=edelweiss, obs_operator_param=obs_operator_param, paths=topography_paths).to_netcdf(
         f"{output_folder}/snowline_parametrization.nc"

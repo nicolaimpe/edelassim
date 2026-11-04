@@ -18,7 +18,7 @@ def postprocess_pro(simulation_folder: str, output_file: str | None = None) -> x
     member_numbers = []
     for member_folder in member_folders:
         member_all_period = xr.open_mfdataset(
-            sorted(glob.glob(f"{member_folder}/offline/pro/*.nc")), concat_dim="time", combine="nested"
+            sorted(glob.glob(f"{member_folder}/offline/PRO*.nc")), concat_dim="time", combine="nested"
         )
 
         midday_mask = member_all_period.coords["time"].dt.hour == 12

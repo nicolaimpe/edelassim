@@ -83,7 +83,7 @@ def assign_month(data: xr.Dataset) -> xr.Dataset:
 
 
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_sigma_obs_var"
     period = slice("2021-11", "2022-05")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
 

@@ -52,7 +52,10 @@ def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, 
     qmin, qmax = 0.1, 0.9
     median_openloop = grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten()
     median_analysis = grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten()
-    reference = grouped_dataset.data_vars["reference"].values.flatten()
+    if "member" in grouped_dataset.data_vars["reference"].dims:
+        reference = grouped_dataset.data_vars["reference"].mean(dim="member").values.flatten()
+    else:
+        reference = grouped_dataset.data_vars["reference"].values.flatten()
 
     # rmse_openloop = compute_rmse(median_openloop - reference)
     # rmse_analysis = compute_rmse(median_analysis - reference)

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
+from snowtools.scores.ensemble import EnsembleScores
 
 from edelassim.observation_operators import dickinson
 from edelassim.visualization.spatial import SNOW_DEPTH_CMAP, add_2d_plot
@@ -15,7 +16,7 @@ from edelassim.visualization.static_files import (
 )
 
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_python_pf"
     period = slice("2021-11", "2022-06")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
     pleiades = pleiades.sel(time=period).sel(band=1).sortby("y", ascending=False)
@@ -35,22 +36,22 @@ if __name__ == "__main__":
         coords=edelweiss_open_loop_pleiades_dates.coords,
     )
 
-    # def compute_crpss_pleiades(data: xr.Dataset) -> xr.DataArray:
+    def compute_crpss_pleiades(data: xr.Dataset) -> xr.DataArray:
 
-    #     crps_open_loop = EnsembleScores(
-    #         timeObs=None, timeSim=None, obs=data.data_vars["pleiades"].values, ensemble=data.data_vars["open_loop"].values
-    #     ).CRPS()
-    #     # print(data.data_vars["open_loop"].values)
-    #     crps_analysis = EnsembleScores(
-    #         timeObs=None, timeSim=None, obs=data.data_vars["pleiades"].values, ensemble=data.data_vars["analysis"].values
-    #     ).CRPS()
-    #     crpss = 1 - (crps_analysis / crps_open_loop)
-    #     return xr.Dataset({"crps_open_loop": crps_open_loop, "crps_analysis": crps_analysis, "crpss": crpss})
+        crps_open_loop = EnsembleScores(
+            timeObs=None, timeSim=None, obs=data.data_vars["pleiades"].values, ensemble=data.data_vars["open_loop"].values
+        ).CRPS()
+        # print(data.data_vars["open_loop"].values)
+        crps_analysis = EnsembleScores(
+            timeObs=None, timeSim=None, obs=data.data_vars["pleiades"].values, ensemble=data.data_vars["analysis"].values
+        ).CRPS()
+        crpss = 1 - (crps_analysis / crps_open_loop)
+        return xr.Dataset({"crps_open_loop": crps_open_loop, "crps_analysis": crps_analysis, "crpss": crpss})
 
-    # crpss = grouped_dataset.groupby(("y", "x", "time")).map(compute_crpss_pleiades)
-    # crpss.to_netcdf("crpss.nc")
+    crpss = grouped_dataset.groupby(("y", "x", "time")).map(compute_crpss_pleiades)
+    crpss.to_netcdf("crpss.nc")
 
-    crpss = xr.open_dataset("../output_folder/crpss.nc").sortby("y", ascending=False)
+    # crpss = xr.open_dataset("../output_folder/crpss.nc").sortby("y", ascending=False)
 
     for i in (0, 1):
         fig, axs = plt.subplots(2, 3, figsize=(18, 18))

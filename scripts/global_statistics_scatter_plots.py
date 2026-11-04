@@ -10,7 +10,7 @@ from edelassim.visualization.scatter import plot_ensemble_envelop
 from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, topography_data_folder
 
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_sigma_obs_var"
     period = slice("2021-11", "2022-05")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, pleiades, bdclim = get_spatial_datasets(xpid)
 
@@ -25,6 +25,7 @@ if __name__ == "__main__":
     bins = BinGrouper(np.arange(0, 4 + 0.01, snow_depth_bin), labels=np.arange(0, 4, snow_depth_bin))
 
     fig, ax = plt.subplots()
+
     grouped_dataset = xr.Dataset(
         {
             "open_loop": edelweiss_openloop.data_vars["DSN_T_ISBA"].sel(time=pleiades.coords["time"], member=slice(0, None)),
@@ -32,9 +33,11 @@ if __name__ == "__main__":
             "reference": pleiades.data_vars["snow_depth"],
         }
     )
+
     grouped_dataset_binned = grouped_dataset.groupby(
         reference=bins, member=UniqueGrouper(edelweiss_openloop.sel(member=slice(0, None)).coords["member"])
     ).mean()
+    # grouped_dataset = grouped_dataset.assign(reference=pleiades.data_vars["snow_depth"].groupby(bins).mean())
     xaxis_data = grouped_dataset_binned.data_vars["reference"].mean(dim="member").values.flatten()
     plot_ensemble_envelop(grouped_dataset=grouped_dataset_binned, x_axis_data=xaxis_data, ax=ax)
     ax.plot([0, 3], [0, 3], color="black", linestyle="dashed")

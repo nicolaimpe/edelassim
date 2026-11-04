@@ -11,9 +11,17 @@ from matplotlib.axes import Axes
 from xarray.groupers import BinGrouper, UniqueGrouper
 
 from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset
-from edelassim.evaluations import compute_scores_grouped_data_spatial
+from edelassim.evaluations import compute_scores_grouped_data, compute_scores_grouped_data_spatial
+from edelassim.observation_operators import dickinson
 from edelassim.postprocess_surfex.soda import duplicated_particles_multiple_assimilation
-from edelassim.visualization.static_files import COLORS, LABELS, get_spatial_datasets, mask, working_folder
+from edelassim.visualization.static_files import (
+    COLORS,
+    LABELS,
+    get_spatial_datasets,
+    mask,
+    topography_data_folder,
+    working_folder,
+)
 
 
 def postprocess_scores(scores: xr.Dataset, bdclim: xr.Dataset) -> xr.Dataset:
@@ -171,7 +179,7 @@ def alt_time_diagramm_plot(score_data: xr.DataArray, ax: Axes):
 
 
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover07_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_sigma_obs_var"
     period = slice("2021-11", "2022-05")
     edelweiss_openloop, edelweiss_analysis, viirs, s2, _, bdclim = get_spatial_datasets(xpid)
 
@@ -203,9 +211,12 @@ if __name__ == "__main__":
         coords=sd_edel_station_analysis.coords,
     )
 
-    scores = xr.open_dataset("../output_folder/scores_2021_2022.nc")
-    scores = scores.assign_coords(dict(variable=["snow_depth", "fractional_snow_cover"]))
-
+    # scores = xr.open_dataset("../output_folder/scores_2021_2022.nc")
+    # scores = scores.assign_coords(dict(variable=["snow_depth", "fractional_snow_cover"]))
+    scores_sd = grouped_dataset.groupby(("time", "num_poste")).map(compute_scores_grouped_data)
+    scores_fsc = dickinson(grouped_dataset).groupby(("time", "num_poste")).map(compute_scores_grouped_data)
+    scores = xr.concat([scores_sd, scores_fsc], dim="variable")
+    scores = scores.assign_coords(variable=["snow_depth", "fractional_snow_cover"])
     scores = postprocess_scores(scores, bdclim)
 
     fig, axs = plt.subplots(nrows=2, figsize=(18, 10))
@@ -264,13 +275,26 @@ if __name__ == "__main__":
 
     ################ VIIRS J+1 as reference - altitude bins 100m
 
-    altitude_bins = BinGrouper(np.arange(700, 3500, 100))
-    ds = grouped_dataset.groupby(elevation=altitude_bins, time=UniqueGrouper()).map(compute_scores_grouped_data_spatial)
-    ds.assign_coords(elevation_min=("elevation_bins", [b.left for b in ds.elevation_bins.values])).swap_dims(
-        {"elevation_bins": "elevation_min"}
-    ).drop_vars("elevation_bins").to_netcdf("../output_folder/edel_viirs_scores.nc")
+    grouped_dataset = xr.Dataset(
+        {
+            "open_loop": dickinson(edelweiss_openloop.DSN_T_ISBA).sel(time=period),
+            "analysis": dickinson(edelweiss_analysis.DSN_T_ISBA).sel(time=period),
+            "reference": viirs.snow_cover_fraction.sel(time=period),
+            "elevation": xr.open_dataarray(
+                f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif",
+            ).sel(band=1),
+        }
+    )
 
-    scores = xr.open_dataset("../output_folder/edel_viirs_scores.nc")
+    altitude_bins = BinGrouper(np.arange(700, 3500, 100))
+    scores = grouped_dataset.groupby(elevation=altitude_bins, time=UniqueGrouper()).map(compute_scores_grouped_data)
+    scores = (
+        scores.assign_coords(elevation_min=("elevation_bins", [b.left for b in scores.elevation_bins.values]))
+        .swap_dims({"elevation_bins": "elevation_min"})
+        .drop_vars("elevation_bins")
+    )  # .to_netcdf("../output_folder/edel_viirs_scores.nc")
+
+    # scores = xr.open_dataset("../output_folder/edel_viirs_scores.nc")
     score = "MAE open loop - MAE analysis"
     scores = np.abs(scores.data_vars["mae"].sel(type="open_loop")) - np.abs(scores.data_vars["mae"].sel(type="analysis"))
     fig, ax = plt.subplots(figsize=(12, 5))

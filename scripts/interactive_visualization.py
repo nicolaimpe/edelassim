@@ -404,7 +404,7 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    xpid = "assim_viirs_cloudcover05_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_soda_dev"
     working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
     observation_folder = f"{working_folder}/observations/grandesrousses250m"
     simulation_folder = f"{working_folder}/simulations/postprocess"

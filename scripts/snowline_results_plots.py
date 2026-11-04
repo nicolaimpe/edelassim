@@ -30,13 +30,13 @@ from edelassim.visualization.static_files import (
 )
 
 if __name__ == "__main__":
-    xpid = "assim_viirs_cloudcover05_wy2122_d93_50cm"
+    xpid = "assim_viirs_cloudcover055_wy2122_python_pf"
     period = slice(datetime(year=2021, month=11, day=1), datetime(year=2022, month=5, day=25))
     qmin, qmax = 0.1, 0.9
 
     part_files = glob(f"{working_folder}/simulations/edelweiss/reanalysis/{xpid}/soda/*PART*")
-    duplicated_particles = duplicated_particles_multiple_assimilation(part_files=part_files)
-    assim_dates = duplicated_particles.coords["time"]
+    # duplicated_particles = duplicated_particles_multiple_assimilation(part_files=part_files)
+    # assim_dates = duplicated_particles.coords["time"]
 
     score = "mae_mean_member"
 
@@ -58,9 +58,12 @@ if __name__ == "__main__":
             {
                 "open_loop": (
                     ("member", "time"),
-                    snowline_openloop_edel.sel(time=good_dates_s2, member=slice(0, None)).values,
+                    snowline_openloop_edel.sel(time=good_dates_s2).sel(member=slice(0, None)).values,
                 ),
-                "analysis": (("member", "time"), snowline_analysis_edel.sel(time=good_dates_s2, member=slice(0, None)).values),
+                "analysis": (
+                    ("member", "time"),
+                    snowline_analysis_edel.sel(time=good_dates_s2).sel(member=slice(0, None)).values,
+                ),
                 "reference": (("time"), snowline_s2.sel(time=good_dates_s2).values),
             },
             coords=snowline_s2.sel(time=good_dates_s2).coords,
@@ -169,16 +172,16 @@ if __name__ == "__main__":
         ax_scores_n.legend(fontsize=6)
         ax_scores_n.grid()
 
-        for ax in (ax_n, ax_scores_n):
-            ax.vlines(
-                assim_dates,
-                ymin=ax.get_ylim()[0],
-                ymax=ax.get_ylim()[1],
-                color="gray",
-                linestyle="dashed",
-                linewidth=0.25,
-                label="assim dates",
-            )
+        # for ax in (ax_n, ax_scores_n):
+        #     ax.vlines(
+        #         assim_dates,
+        #         ymin=ax.get_ylim()[0],
+        #         ymax=ax.get_ylim()[1],
+        #         color="gray",
+        #         linestyle="dashed",
+        #         linewidth=0.25,
+        #         label="assim dates",
+        #     )
 
     fig.subplots_adjust(hspace=0.35)
     plt.show()
