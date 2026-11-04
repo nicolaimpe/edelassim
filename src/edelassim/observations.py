@@ -2,7 +2,6 @@ import xarray as xr
 from geospatial_grid.gsgrid import GSGrid
 from geospatial_grid.reprojections import reproject_using_grid
 from ndsi_fsc_calibration.snow_cover_products import S2_CLASSES
-from pyproj import CRS
 from rasterio.enums import Resampling
 
 # We define Météo-France class encoding via a dictio
@@ -57,21 +56,6 @@ def reprojection_mf_fsc_l3_to_grid(meteofrance_snow_cover: xr.DataArray, output_
     out_snow_cover = out_snow_cover.where(invalid_mask == False, resampled_max)
     out_snow_cover = out_snow_cover.rio.write_nodata(METEOFRANCE_CLASSES["nodata"][0])
     return out_snow_cover.astype("u1")
-
-
-class EdelweissGrandesRoussesGrid(GSGrid):
-    """This grid bound correspond to a bounding box including all mountaineous areas over metropolitan France in WGS84 geographic coordinates."""
-
-    def __init__(self):
-        super().__init__(
-            x0=937750,
-            y0=6.46425e06,
-            resolution=250,
-            width=143,
-            height=101,
-            crs=CRS.from_epsg(2154),
-            name="Edelweiss_GrandesRousses",
-        )
 
 
 def scale_virrs(image_sat: xr.DataArray) -> xr.DataArray:

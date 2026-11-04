@@ -12,3 +12,15 @@ def plot_ensemble_time_series(time_series_data: xr.DataArray, mb_to_plot: int, a
     ax.plot(t_coord, mb_data, color=color, linestyle="dashed", linewidth=3, label=label)
     for mb in time_series_data.coords["member"]:
         ax.plot(t_coord, time_series_data.sel(member=mb), linestyle="dotted", color=color, linewidth=0.6)
+
+
+def add_assim_dates(assim_dates, ax: Axes):
+    ax.vlines(
+        assim_dates,
+        ymin=ax.get_ybound()[0],
+        ymax=ax.get_ybound()[1],
+        color="gray",
+        linestyle="dashed",
+        linewidth=0.5,
+        label="Assimilation dates",
+    )

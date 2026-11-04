@@ -47,51 +47,39 @@ def boxplot_logit_plot(
     bp["boxes"][0].set_facecolor(kwargs["color"])
 
 
-def plot_ensemble_envelop(grouped_dataset: xr.Dataset, x_axis_data: np.ndarray, ax: Axes, plot_ref: bool = True):
-    # Should fix this member mean of Pleiades
+def plot_ensemble_simulation(simulation_data: xr.DataArray, ax: Axes, x_axis_data: np.ndarray, color: str, label: str) -> None:
     qmin, qmax = 0.1, 0.9
-    median_openloop = grouped_dataset.data_vars["open_loop"].median(dim="member").values.flatten()
-    median_analysis = grouped_dataset.data_vars["analysis"].median(dim="member").values.flatten()
-    if "member" in grouped_dataset.data_vars["reference"].dims:
-        reference = grouped_dataset.data_vars["reference"].mean(dim="member").values.flatten()
-    else:
-        reference = grouped_dataset.data_vars["reference"].values.flatten()
+    median = simulation_data.median(dim="member").values.flatten()
+    qlow = simulation_data.quantile(qmin, dim="member").values.flatten()
+    qhigh = simulation_data.quantile(qmax, dim="member").values.flatten()
+    ax.fill_between(x_axis_data, qlow, qhigh, alpha=0.25, color=color, label=f"{label} p{qmin * 100} - p{qmax * 100}")
+    ax.plot(x_axis_data, median, color=color, linewidth=2, linestyle="dashed", label=f"{label} median")
 
-    # rmse_openloop = compute_rmse(median_openloop - reference)
-    # rmse_analysis = compute_rmse(median_analysis - reference)
-    ax.fill_between(
-        x_axis_data,
-        grouped_dataset.data_vars["open_loop"].quantile(qmin, dim="member").values.flatten(),
-        grouped_dataset.data_vars["open_loop"].quantile(qmax, dim="member").values.flatten(),
-        alpha=0.25,
-        color=COLORS["edel_ol"],
-        label=f"{LABELS['edel_ol']} p{qmin * 100} - p{qmax * 100}",
-    )
 
-    ax.plot(
-        x_axis_data,
-        median_openloop,
-        color=COLORS["edel_ol"],
-        linewidth=2,
-        linestyle="dashed",
-        label=f"{LABELS['edel_ol']} median",
-    )
-    if plot_ref:
-        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="In situ")
-    ax.fill_between(
-        x_axis_data,
-        grouped_dataset.data_vars["analysis"].quantile(qmin, dim="member").values.flatten(),
-        grouped_dataset.data_vars["analysis"].quantile(qmax, dim="member").values.flatten(),
-        alpha=0.25,
-        color=COLORS["edel_an"],
-        label=f"{LABELS['edel_an']} p{qmin * 100} - p{qmax * 100}",
+def plot_data_assimilation_simulation(
+    open_loop: xr.DataArray,
+    assim: xr.DataArray,
+    x_axis_data: np.ndarray,
+    ax: Axes,
+    reference: xr.DataArray | None = None,
+) -> None:
+    # Should fix this member mean of Pleiades
+
+    plot_data_assimilation_base_simulation(open_loop=open_loop, x_axis_data=x_axis_data, reference=reference)
+    if reference is not None:
+        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")
+
+
+def plot_data_assimilation_base_simulation(
+    open_loop: xr.DataArray,
+    x_axis_data: np.ndarray,
+    ax: Axes,
+    reference: xr.DataArray | None = None,
+) -> None:
+    # Should fix this member mean of Pleiades
+    plot_ensemble_simulation(
+        simulation_data=open_loop, ax=ax, x_axis_data=x_axis_data, color=COLORS["edel_ol"], label=LABELS["edel_ol"]
     )
 
-    ax.plot(
-        x_axis_data,
-        median_analysis,
-        color=COLORS["edel_an"],
-        label=f"{LABELS['edel_an']} median",
-        linewidth=2,
-        linestyle="dashed",
-    )
+    if reference is not None:
+        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")

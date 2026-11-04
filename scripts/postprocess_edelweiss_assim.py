@@ -9,6 +9,7 @@ import xarray as xr
 import yaml
 from mountain_data_binner.mountain_binner import MountainBinnerConfig
 
+from edelassim.evaluations import compute_scores
 from edelassim.postprocess_surfex.forcing import reorder_forcing_by_duplicated_particles
 from edelassim.postprocess_surfex.pro import (
     append_average_member_value,
