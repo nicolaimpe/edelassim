@@ -49,25 +49,25 @@ def boxplot_logit_plot(
 
 def plot_ensemble_simulation(simulation_data: xr.DataArray, ax: Axes, x_axis_data: np.ndarray, color: str, label: str) -> None:
     qmin, qmax = 0.1, 0.9
-    median = simulation_data.median(dim="member").values.flatten()
+    median = simulation_data.mean(dim="member").values.flatten()
     qlow = simulation_data.quantile(qmin, dim="member").values.flatten()
     qhigh = simulation_data.quantile(qmax, dim="member").values.flatten()
     ax.fill_between(x_axis_data, qlow, qhigh, alpha=0.25, color=color, label=f"{label} p{qmin * 100} - p{qmax * 100}")
-    ax.plot(x_axis_data, median, color=color, linewidth=2, linestyle="dashed", label=f"{label} median")
+    ax.plot(x_axis_data, median, color=color, linewidth=2, linestyle="dashed", label=f"{label} mean")
 
 
-def plot_data_assimilation_simulation(
-    open_loop: xr.DataArray,
-    assim: xr.DataArray,
-    x_axis_data: np.ndarray,
-    ax: Axes,
-    reference: xr.DataArray | None = None,
-) -> None:
-    # Should fix this member mean of Pleiades
+# def plot_data_assimilation_simulation(
+#     open_loop: xr.DataArray,
+#     assim: xr.DataArray,
+#     x_axis_data: np.ndarray,
+#     ax: Axes,
+#     reference: xr.DataArray | None = None,
+# ) -> None:
+#     # Should fix this member mean of Pleiades
 
-    plot_data_assimilation_base_simulation(open_loop=open_loop, x_axis_data=x_axis_data, reference=reference)
-    if reference is not None:
-        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")
+#     plot_data_assimilation_base_simulation(open_loop=open_loop, x_axis_data=x_axis_data, reference=reference)
+#     if reference is not None:
+#         ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")
 
 
 def plot_data_assimilation_base_simulation(
@@ -82,4 +82,4 @@ def plot_data_assimilation_base_simulation(
     )
 
     if reference is not None:
-        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")
+        ax.plot(reference, color="black", linestyle="dashed", linewidth=2, label="Reference")

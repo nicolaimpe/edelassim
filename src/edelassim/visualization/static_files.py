@@ -4,7 +4,11 @@ import xarray as xr
 from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from pyproj import CRS, Transformer
 
-from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset, find_station_locations
+from edelassim.bdclim import (
+    extract_bdclim_locations_on_s2,
+    extract_bdclim_locations_on_spatial_dataset,
+    find_station_locations,
+)
 from edelassim.observations import (
     find_clear_dates_s2,
     find_clear_dates_viirs,
@@ -42,11 +46,14 @@ viirs_snowline_file = f"{observation_folder}/meteofrance/snowline_parametrizatio
 
 dem_file = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
 glacier_mask_path = f"{landcover_folder}/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
+slope_20m_file = f"{topography_data_folder}/250m/SLP_GR_L93_250m.tif"
 
 glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
 forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
 mask = glacier_mask + forest_mask
 mask_20m = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154)).rio.reproject_match(xr.open_dataset(s2_path))
+
+slope_20m = xr.open_dataarray(slope_20m_file)
 
 
 def list_satellite_clear_dates(period: slice = slice("2021-11", "2022-06")):
@@ -75,7 +82,7 @@ def get_spatial_datasets(period: slice = slice("2021-11", "2022-06")) -> tuple[x
     bdclim = xr.open_dataset(bdclim_filepath).sel(time=period)
     mask_stations = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=mask)
     mask_stations = mask_stations.assign_coords({"x": bdclim.coords["x"], "y": bdclim.coords["y"]})
-    bdclim = bdclim.where(1 - mask_stations, drop=True).data_vars["neigetotx"]
+    bdclim = bdclim.where(1 - mask_stations, drop=True).data_vars["snow_depth"]
     return edelweiss_ol, viirs, s2, pleiades, bdclim
 
 
@@ -94,21 +101,19 @@ def get_snowlines() -> tuple[xr.Dataset, ...]:
     return snowline_openloop_edel_ds, snowline_viirs_ds, snowline_s2_ds
 
 
+def get_snowline_simulation(actual_xpid: str, period: slice = slice("2021-11", "2022-06")):
+    return (
+        xr.open_dataset(edelweiss_analysis_snowline_file.replace("xpid_placeholder", actual_xpid))
+        .sel(slope="8 - 30")
+        .sel(time=period)
+    )
+
+
 def get_station_location_data(
     bdclim: xr.Dataset, edelweiss_openloop: xr.Dataset, viirs: xr.Dataset, s2: xr.Dataset
 ) -> tuple[xr.Dataset, ...]:
+
     sd_edel_station_openloop = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_openloop)
     viirs_station = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=viirs)
     s2_station = extract_bdclim_locations_on_s2(bdclim=bdclim, s2=s2)
     return sd_edel_station_openloop, viirs_station, s2_station
-
-
-def extract_bdclim_locations_on_s2(bdclim: xr.Dataset, s2: xr.Dataset) -> xr.Dataset:
-    x_station, y_station = find_station_locations(bdclim_dataset=bdclim)
-    trans = Transformer.from_crs(2154, 32631)
-    x_station_s2, y_station_s2 = trans.transform(x_station, y_station)
-    # Xarray advanced indexing (according to Mistral)
-    x_poste_s2_da = xr.DataArray(x_station_s2, dims="num_poste", coords={"num_poste": bdclim.num_poste})
-    y_poste_s2_da = xr.DataArray(y_station_s2, dims="num_poste", coords={"num_poste": bdclim.num_poste})
-    s2_station = s2.sel(x=x_poste_s2_da, y=y_poste_s2_da, method="nearest")
-    return s2_station

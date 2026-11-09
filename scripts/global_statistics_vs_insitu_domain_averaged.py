@@ -33,99 +33,110 @@ from edelassim.visualization.time_series import add_assim_dates
 
 if __name__ == "__main__":
     ### Inputs and preprocessing
-    xpids = ["assim_viirs_cloudcover055_wy2122_sigma_obs_var", "assim_viirs_cloudcover055_wy2122_python_pf"]
+    xpids = ["assim_viirs_cloudcover055_wy2122_soda_dev", "assim_viirs_cloudcover055_wy2122_python_pf"]
     colors = ["magenta", "darkgreen"]
-    labels = ["sigma var", "sigma const"]
+    labels = ["SODA", "Python"]
     period = slice("2021-11", "2022-06")
     edelweiss_openloop, viirs, s2, _, bdclim = get_spatial_datasets(period=period)
     good_dates_viirs, good_dates_s2 = list_satellite_clear_dates(period=period)
     viirs = viirs.sel(time=good_dates_viirs)
     s2 = s2.sel(time=good_dates_s2)
+
     bdclim = filter_discontinuous_stations(bdclim)
+    bdclim = bdclim.sel(num_poste=[5063003, 5079402, 5181002, 38005402, 38191002, 73013001, 73242003, 73306401])
     sd_edel_station_openloop, viirs_station, s2_station = get_station_location_data(
         bdclim=bdclim, edelweiss_openloop=edelweiss_openloop, viirs=viirs, s2=s2
     )
     sd_edel_station_openloop = sd_edel_station_openloop.data_vars["DSN_T_ISBA"].sel(member=slice(0, None))
     duplicated_particles, assim_dates = get_duplicated_particles_assim_dates(acutal_xpid=xpids[0])
+    edelweiss_analysis = get_data_assimilation_simulation(actual_xpid=xpids[0], period=period)
+    edelweiss_analysis = edelweiss_analysis.data_vars["DSN_T_ISBA"].sel(member=slice(0, None))
+    sd_edel_station_analysis = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_analysis)
 
     ## Temporal simulation of domain wide means on station sites
 
-    # fig = plt.figure(figsize=(14, 9))
-    # fig.suptitle(f"Edelweiss vs in situ ({bdclim.sizes['num_poste']} locations aggregated) ")
-    # grid_spec = GridSpec(nrows=2, ncols=1, hspace=0.25, height_ratios=(1, 1))
-    # ax_sd = fig.add_subplot(grid_spec[0])
-    # ax_fsc = fig.add_subplot(grid_spec[1])
-    # all_dates = sd_edel_station_openloop.coords["time"].values
-    # ol = sd_edel_station_openloop.groupby("member").mean(dim="num_poste")
-    # plot_data_assimilation_base_simulation(
-    #     open_loop=ol,
-    #     x_axis_data=all_dates,
-    #     ax=ax_sd,
-    #     reference=bdclim.mean(dim="num_poste"),
-    # )
-    # ol = dickinson(sd_edel_station_openloop).groupby("member").mean(dim="num_poste")
-    # plot_data_assimilation_base_simulation(
-    #     open_loop=ol,
-    #     x_axis_data=all_dates,
-    #     ax=ax_fsc,
-    #     reference=dickinson(bdclim).mean(dim="num_poste"),
-    # )
+    fig = plt.figure(figsize=(14, 9))
+    fig.suptitle(f"Edelweiss vs in situ ({bdclim.sizes['num_poste']} locations aggregated) ")
+    grid_spec = GridSpec(nrows=2, ncols=1, hspace=0.25, height_ratios=(1, 1))
+    ax_sd = fig.add_subplot(grid_spec[0])
+    ax_fsc = fig.add_subplot(grid_spec[1])
+    all_dates = sd_edel_station_openloop.coords["time"].values
+    ol = sd_edel_station_openloop.groupby("member").mean(dim="num_poste")
+    plot_data_assimilation_base_simulation(
+        open_loop=ol,
+        x_axis_data=all_dates,
+        ax=ax_sd,
+        reference=bdclim.mean(dim="num_poste"),
+    )
+    ol = dickinson(sd_edel_station_openloop).groupby("member").mean(dim="num_poste")
+    plot_data_assimilation_base_simulation(
+        open_loop=ol,
+        x_axis_data=all_dates,
+        ax=ax_fsc,
+        reference=dickinson(bdclim).mean(dim="num_poste"),
+    )
 
-    # for idx, xpid in enumerate(xpids):
-    #     edelweiss_analysis = get_data_assimilation_simulation(actual_xpid=xpid, period=period)
-    #     edelweiss_analysis = edelweiss_analysis.data_vars["DSN_T_ISBA"].sel(member=slice(0, None))
-    #     sd_edel_station_analysis = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_analysis)
-    #     sd_assim = sd_edel_station_analysis.groupby("member").mean(dim="num_poste")
-    #     plot_ensemble_simulation(
-    #         simulation_data=sd_assim,
-    #         ax=ax_sd,
-    #         x_axis_data=sd_assim.time,
-    #         color=colors[idx],
-    #         label=labels[idx],
-    #     )
-    #     fsc_assim = dickinson(sd_edel_station_analysis).groupby("member").mean(dim="num_poste")
-    #     plot_ensemble_simulation(
-    #         simulation_data=fsc_assim,
-    #         ax=ax_fsc,
-    #         x_axis_data=fsc_assim.time,
-    #         color=colors[idx],
-    #         label=labels[idx],
-    #     )
+    for idx, xpid in enumerate(xpids):
+        edelweiss_analysis = get_data_assimilation_simulation(actual_xpid=xpid, period=period)
+        edelweiss_analysis = edelweiss_analysis.data_vars["DSN_T_ISBA"].sel(member=slice(0, None))
+        sd_edel_station_analysis = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_analysis)
+        sd_assim = sd_edel_station_analysis.groupby("member").mean(dim="num_poste")
+        plot_ensemble_simulation(
+            simulation_data=sd_assim,
+            ax=ax_sd,
+            x_axis_data=sd_assim.time,
+            color=colors[idx],
+            label=labels[idx],
+        )
+        fsc_assim = dickinson(sd_edel_station_analysis).groupby("member").mean(dim="num_poste")
+        plot_ensemble_simulation(
+            simulation_data=fsc_assim,
+            ax=ax_fsc,
+            x_axis_data=fsc_assim.time,
+            color=colors[idx],
+            label=labels[idx],
+        )
 
-    # # Satellite FSC data
-    # dates = viirs_station.coords["time"].values
-    # obs = viirs_station.data_vars["snow_cover_fraction"].mean(dim="num_poste").values.flatten()
-    # ax_fsc.plot(dates, obs, color=COLORS["viirs"], linewidth=0, marker=".", markersize=3, label=LABELS["viirs"])
-    # dates = s2_station.coords["time"].values
-    # obs = s2_station.data_vars["snow_cover_fraction"].mean(dim="num_poste").values.flatten()
-    # ax_fsc.plot(dates, obs, color=COLORS["s2"], linewidth=0, marker="s", markersize=6, mfc="none", label=LABELS["s2"])
+    # Satellite FSC data
+    dates = viirs_station.coords["time"].values
+    obs = viirs_station.data_vars["snow_cover_fraction"].mean(dim="num_poste").values.flatten()
+    ax_fsc.plot(dates, obs, color=COLORS["viirs"], linewidth=0, marker=".", markersize=3, label=LABELS["viirs"])
+    dates = s2_station.coords["time"].values
+    obs = s2_station.data_vars["snow_cover_fraction"].mean(dim="num_poste").values.flatten()
+    ax_fsc.plot(dates, obs, color=COLORS["s2"], linewidth=0, marker="s", markersize=6, mfc="none", label=LABELS["s2"])
 
-    # # Finish plot
-    # ax_sd.legend()
-    # ax_sd.set_title("Snow depth")
-    # ax_sd.set_ylabel("SD [m]")
+    # Finish plot
+    ax_sd.legend()
+    ax_sd.set_title("Snow depth")
+    ax_sd.set_ylabel("SD [m]")
 
-    # ax_sd.grid()
+    ax_sd.grid()
 
-    # ax_fsc.grid()
-    # ax_fsc.set_title("Fractional snow cover")
-    # ax_fsc.set_ylabel("FSC [-]")
-    # add_assim_dates(assim_dates=assim_dates, ax=ax_fsc)
-    # ax_fsc.legend()
+    ax_fsc.grid()
+    ax_fsc.set_title("Fractional snow cover")
+    ax_fsc.set_ylabel("FSC [-]")
+    add_assim_dates(assim_dates=assim_dates, ax=ax_fsc)
+    ax_fsc.legend()
 
     # Scores
 
-    grouped_dataset = xr.Dataset(
-        {
-            "eval": sd_edel_station_openloop,
-            "reference": bdclim,
-        },
-        coords=sd_edel_station_openloop.coords,
-    )
+    # grouped_dataset = xr.Dataset(
+    #     {
+    #         "eval": sd_edel_station_openloop,
+    #         "reference": bdclim,
+    #     },
+    #     coords=sd_edel_station_openloop.coords,
+    # )
 
-    # Scores on SD
-    scores_sd = grouped_dataset.groupby(("num_poste", "time")).map(compute_scores).mean(dim="num_poste")
-    print(scores_sd)
+    # # Scores on SD
+    # scores_sd = grouped_dataset.groupby(("num_poste", "time")).map(compute_scores).mean(dim="num_poste")
+    # scores_fsc = dickinson(grouped_dataset).groupby(("num_poste", "time")).map(compute_scores).mean(dim="num_poste")
+    # scores_fsc.to_netcdf(
+    #     "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/open_loop/scores/fsc/scores.nc"
+    # )
+    # scores_sd.to_netcdf(
+    #     "/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/open_loop/scores/sd/scores.nc"
+    # )
     # scores_fsc = (
     #     dickinson(grouped_dataset).groupby(("num_poste", "time")).map(compute_scores_grouped_data).mean(dim="num_poste")
     # )

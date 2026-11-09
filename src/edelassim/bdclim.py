@@ -18,14 +18,22 @@ def filter_discontinuous_stations(bdclim_dataset: xr.DataArray) -> xr.Dataset:
 
 
 def extract_bdclim_locations_on_spatial_dataset(bdclim_dataset: xr.Dataset, spatial_dataset: xr.Dataset) -> xr.Dataset:
-    x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim_dataset)
-    sd_station = bdclim_dataset.where(bdclim_dataset["x"] == x_poste, drop=True).where(
-        bdclim_dataset["y"] == y_poste, drop=True
-    )
-    # Xarray advanced indexing (according to Mistral)
-    x_poste_da = xr.DataArray(sd_station.x, dims="num_poste", coords={"num_poste": sd_station.num_poste})
-    y_poste_da = xr.DataArray(sd_station.y, dims="num_poste", coords={"num_poste": sd_station.num_poste})
+
+    x_poste_da = xr.DataArray(bdclim_dataset.x, dims="num_poste", coords={"num_poste": bdclim_dataset.num_poste})
+    y_poste_da = xr.DataArray(bdclim_dataset.y, dims="num_poste", coords={"num_poste": bdclim_dataset.num_poste})
+
     return spatial_dataset.sel(x=x_poste_da, y=y_poste_da, method="nearest", drop=True)
+
+
+def extract_bdclim_locations_on_s2(bdclim: xr.Dataset, s2: xr.Dataset) -> xr.Dataset:
+    x_station, y_station = find_station_locations(bdclim_dataset=bdclim)
+    trans = Transformer.from_crs(2154, 32631)
+    x_station_s2, y_station_s2 = trans.transform(x_station, y_station)
+    # Xarray advanced indexing (according to Mistral)
+    x_poste_s2_da = xr.DataArray(x_station_s2, dims="num_poste", coords={"num_poste": bdclim.num_poste})
+    y_poste_s2_da = xr.DataArray(y_station_s2, dims="num_poste", coords={"num_poste": bdclim.num_poste})
+    s2_station = s2.sel(x=x_poste_s2_da, y=y_poste_s2_da, method="nearest")
+    return s2_station
 
 
 def crop_bdclim(bdclim_netcdf_path: str, grid: GSGrid) -> xr.Dataset:
