@@ -45,9 +45,7 @@ if __name__ == "__main__":
     grid_spec = GridSpec(nrows=4, ncols=1, height_ratios=(1, 0.5, 1, 0.5))
     fig = plt.figure(figsize=(18, 14))
     fig.suptitle("Snowline vs time")
-    snowlines = get_snowlines()
-    snowlines = [find_snowline_from_snow_penalization(sl).sel(time=period) for sl in snowlines]
-    snowline_openloop_edel, snowline_viirs, snowline_s2 = snowlines
+    snowline_openloop_edel, snowline_viirs, snowline_s2 = get_snowlines()
     for asp_idx, asp in enumerate(["N", "S"]):
         ol = snowline_openloop_edel.sel(member=slice(0, None)).sel(aspect=asp)
         s2 = snowline_s2.sel(time=good_dates_s2).sel(aspect=asp)

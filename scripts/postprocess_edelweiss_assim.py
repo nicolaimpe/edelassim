@@ -5,12 +5,14 @@ import glob
 import logging
 import os
 
+import numpy as np
 import xarray as xr
 import yaml
 from mountain_data_binner.mountain_binner import MountainBinnerConfig
+from xarray.groupers import BinGrouper, UniqueGrouper
 
 from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset
-from edelassim.evaluations import compute_scores
+from edelassim.evaluations import compute_ensemble_scores
 from edelassim.observation_operators import dickinson
 from edelassim.postprocess_surfex.forcing import reorder_forcing_by_duplicated_particles
 from edelassim.postprocess_surfex.pro import (
@@ -21,7 +23,13 @@ from edelassim.postprocess_surfex.pro import (
 )
 from edelassim.postprocess_surfex.soda import duplicated_particles_multiple_assimilation
 from edelassim.snowlines import compute_forcing_snowline_parametrization
-from edelassim.visualization.static_files import bdclim_filepath
+from edelassim.visualization.static_files import (
+    bdclim_filepath,
+    get_bdclim,
+    get_data_assimilation_simulation,
+    get_viirs,
+    simulation_folder,
+)
 
 # Module configuration
 logger = logging.getLogger("logger")
@@ -52,13 +60,14 @@ logging.basicConfig(level=logging.INFO)
 # wget -r -l 0 ftp://imperatoren@hendrix/vortex/edelweiss/reanalysis/assim_viirs_cloudcover07_wy2122_d93_50cm/ -A "*PART*"
 if __name__ == "__main__":
     xpid = "assim_viirs_cloudcover055_wy2122_sigma_obs_var"
+    # xpid = "open_loop"
     vconf = "reanalysis"
 
     simulation_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/{vconf}/{xpid}"
     topography_data_folder = "/home/imperatoren/work/edelweiss_assimilation/data/grandesrousses250m/auxiliary/topography/"
     output_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/{vconf}/{xpid}"
     forcing_folder = "/home/imperatoren/work/edelweiss_assimilation/forcing/"
-    # ######### EDELWEISS Regrid and compute mean member
+    ######### EDELWEISS Regrid and compute mean member
     # logger.info("Edelweiss postprocessing - regridding")
     # snow_depth_edelweiss = postprocess_pro(simulation_folder=simulation_folder, output_file=None)
     # snow_depth_edelweiss = append_median_member_value(snow_depth_edelweiss)
@@ -132,29 +141,60 @@ if __name__ == "__main__":
 
     ##### Compute scores
     ## vs in situ data
-    logger.info("Compute scores vs BDCLIM")
-    edelweiss = xr.open_dataset(f"{output_folder}/spatial.nc").sel(member=slice(0, None))
-    bdclim = xr.open_dataset(bdclim_filepath).sel(time=slice(edelweiss.coords["time"][0], edelweiss.coords["time"][-1])) / 100
-    sd_edel_station_assim = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss).data_vars[
-        "DSN_T_ISBA"
-    ]
-    grouped_dataset = xr.Dataset(
-        {
-            "eval": sd_edel_station_assim,
-            "reference": bdclim.snow_depth,
-        },
-        coords=sd_edel_station_assim.coords,
-    )
+    for xpid in [
+        "assim_viirs_cloudcover055_wy2122_sigma_obs_var",
+        "assim_viirs_cloudcover055_wy2122_python_pf",
+        "assim_viirs_cloudcover055_wy2122_soda_dev",
+        "open_loop",
+    ]:
+        simulation_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/edelweiss/{vconf}/{xpid}"
+        output_folder = f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/{vconf}/{xpid}"
+        edelweiss = get_data_assimilation_simulation(xpid).load()
 
-    scores_bdclim_sd = grouped_dataset.groupby(("num_poste", "time")).map(compute_scores)
-    scores_bdclim_sd.to_netcdf(
-        f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/{xpid}/scores/sd/scores.nc"
-    )
-    scores_bdclim_fsc = dickinson(grouped_dataset).groupby(("num_poste", "time")).map(compute_scores)
-    scores_bdclim_fsc.to_netcdf(
-        f"/home/imperatoren/work/edelweiss_assimilation/simulations/postprocess/reanalysis/{xpid}/scores/fsc/scores.nc"
-    )
-    ## vs VIIRS J+1
+        # logger.info("Compute scores vs BDCLIM")
+        # edelweiss = xr.load_dataset(f"{output_folder}/spatial.nc").sel(member=slice(0, None))
+        # bdclim = get_bdclim(period=slice(edelweiss.coords["time"][0], edelweiss.coords["time"][-1])).load()
+        # sd_edel_station_assim = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss).data_vars[
+        #     "DSN_T_ISBA"
+        # ]
+        # grouped_dataset = xr.Dataset(
+        #     {"prediction": sd_edel_station_assim, "reference": bdclim},
+        #     coords=sd_edel_station_assim.coords,
+        # )
+
+        # scores_bdclim_sd = compute_ensemble_scores(grouped_dataset)
+        # scores_bdclim_sd.to_netcdf(f"{output_folder}/scores/sd/bdclim/scores.nc")
+        # scores_bdclim_fsc = compute_ensemble_scores(dickinson(grouped_dataset))
+        # scores_bdclim_fsc.to_netcdf(f"{output_folder}/scores/fsc/bdclim/scores.nc")
+
+        ## vs VIIRS J+1
+        logger.info("Compute scores vs VIIRS D+1")
+        viirs = get_viirs(period=slice(edelweiss.coords["time"][0], edelweiss.coords["time"][-1])).load()
+        grouped_dataset = xr.Dataset(
+            {
+                "prediction": dickinson(edelweiss.data_vars["DSN_T_ISBA"]),
+                "reference": viirs.data_vars["snow_cover_fraction"],
+                "elevation": xr.open_dataarray(
+                    f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif",
+                ).sel(band=1),
+            }
+        )
+
+        altitude_bins = BinGrouper(np.arange(650, 3450, 100))
+
+        elevation_aggregated_fsc = grouped_dataset.groupby(elevation=altitude_bins, time=UniqueGrouper()).mean(
+            dim=("stacked_y_x_time")
+        )
+        scores = compute_ensemble_scores(elevation_aggregated_fsc)
+        # scores = grouped_dataset.groupby(elevation=altitude_bins, time=UniqueGrouper()).map(compute_ensemble_scores)
+        scores = (
+            scores.assign_coords(
+                elevation_min=("elevation_bins", [b.left for b in scores.elevation_bins.values]),
+                elevation_max=("elevation_bins", [b.right for b in scores.elevation_bins.values]),
+            )
+            .swap_dims({"elevation_bins": "elevation_min"})
+            .drop_vars("elevation_bins")
+        ).to_netcdf(f"{output_folder}/scores/fsc/viirs/scores.nc")
 
     # grouped_dataset = xr.Dataset(
     #     {

@@ -82,4 +82,4 @@ def plot_data_assimilation_base_simulation(
     )
 
     if reference is not None:
-        ax.plot(reference, color="black", linestyle="dashed", linewidth=2, label="Reference")
+        ax.plot(x_axis_data, reference, color="black", linestyle="dashed", linewidth=2, label="Reference")

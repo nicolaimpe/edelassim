@@ -1,5 +1,7 @@
+from datetime import datetime
 from glob import glob
 
+import pandas as pd
 import xarray as xr
 from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from pyproj import CRS, Transformer
@@ -16,6 +18,7 @@ from edelassim.observations import (
     valid_snow_cover_fraction_viirs_mf,
 )
 from edelassim.postprocess_surfex.soda import duplicated_particles_multiple_assimilation
+from edelassim.snowlines import find_snowline_from_snow_penalization
 
 # Snowline plots
 LABELS = {"s2": "Sentinel-2", "viirs": "VIIRS", "edel_ol": "OL", "edel_an": "Assim", "bdclim": "In situ"}
@@ -31,6 +34,7 @@ observation_folder = f"{working_folder}/observations/grandesrousses250m/"
 topography_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/topography/"
 landcover_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/"
 forest_mask_path = f"{landcover_folder}/forest_mask/forest_mask_corine_grandesrousses_max.nc"
+bera_snowlines_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/snowlines_bera/"
 
 edelweiss_openloop_file = f"{edelweiss_openloop_folder}/spatial.nc"
 edelweiss_analysis_file = f"{edelweiss_analysis_folder}/spatial.nc"
@@ -55,6 +59,8 @@ mask_20m = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154)).rio.reproject_
 
 slope_20m = xr.open_dataarray(slope_20m_file)
 
+bera_snowline_files = glob(f"{bera_snowlines_data_folder}/*.txt")
+
 
 def list_satellite_clear_dates(period: slice = slice("2021-11", "2022-06")):
     good_dates_viirs = find_clear_dates_viirs(
@@ -73,20 +79,30 @@ def get_duplicated_particles_assim_dates(acutal_xpid: str) -> tuple[xr.DataArray
     return duplicated_particles, assim_dates
 
 
-def get_spatial_datasets(period: slice = slice("2021-11", "2022-06")) -> tuple[xr.Dataset, ...]:
-    edelweiss_ol = xr.open_dataset(edelweiss_openloop_file).where(1 - mask).sel(time=period)
-    viirs = valid_snow_cover_fraction_viirs_mf(xr.open_dataset(viirs_file).where(1 - mask)).sel(time=period)
-    s2 = xr.open_dataset(s2_path)
-    s2 = valid_snow_cover_fraction_s2(s2.where(1 - mask_20m)).sel(time=period)
-    pleiades = xr.open_dataset(pleiades_path).sel(time=period)
+def get_bdclim(period: slice = slice("2021-11", "2022-06")) -> xr.Dataset:
     bdclim = xr.open_dataset(bdclim_filepath).sel(time=period)
     mask_stations = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=mask)
     mask_stations = mask_stations.assign_coords({"x": bdclim.coords["x"], "y": bdclim.coords["y"]})
     bdclim = bdclim.where(1 - mask_stations, drop=True).data_vars["snow_depth"]
+    return bdclim
+
+
+def get_viirs(period: slice = slice("2021-11", "2022-06")) -> xr.Dataset:
+    viirs = valid_snow_cover_fraction_viirs_mf(xr.open_dataset(viirs_file).where(1 - mask)).sel(time=period)
+    return viirs
+
+
+def get_spatial_datasets(period: slice = slice("2021-11", "2022-06")) -> tuple[xr.Dataset, ...]:
+    edelweiss_ol = xr.open_dataset(edelweiss_openloop_file).where(1 - mask).sel(time=period)
+    viirs = get_viirs(period=period)
+    s2 = xr.open_dataset(s2_path)
+    s2 = valid_snow_cover_fraction_s2(s2.where(1 - mask_20m)).sel(time=period)
+    pleiades = xr.open_dataset(pleiades_path).sel(time=period)
+    bdclim = get_bdclim(period=period)
     return edelweiss_ol, viirs, s2, pleiades, bdclim
 
 
-def get_data_assimilation_simulation(actual_xpid: str, period: slice = slice("2021-11", "2022-06")):
+def get_data_assimilation_simulation(actual_xpid: str, period: slice = slice(None, None)):
     return xr.open_dataset(edelweiss_analysis_file.replace("xpid_placeholder", actual_xpid)).where(1 - mask).sel(time=period)
 
 
@@ -94,15 +110,21 @@ def get_data_assimilation_snowline(actual_xpid: str, period: slice = slice("2021
     return xr.open_dataset(edelweiss_analysis_snowline_file.replace("xpid_placeholder", actual_xpid)).sel(slope="8 - 30")
 
 
-def get_snowlines() -> tuple[xr.Dataset, ...]:
-    snowline_openloop_edel_ds = xr.open_dataset(edelweiss_openloop_snowline_file).sel(slope="8 - 30")
-    snowline_viirs_ds = xr.open_dataset(viirs_snowline_file).sel(slope="8 - 30")
-    snowline_s2_ds = xr.open_dataset(s2_snowline_path).sel(slope="8 - 30")
+def get_snowlines(period: slice = slice(None, None)) -> tuple[xr.Dataset, ...]:
+    snowline_openloop_edel_ds = find_snowline_from_snow_penalization(
+        xr.open_dataset(edelweiss_openloop_snowline_file).sel(slope="8 - 30").sel(time=period)
+    )
+    snowline_viirs_ds = find_snowline_from_snow_penalization(
+        xr.open_dataset(viirs_snowline_file).sel(slope="8 - 30").sel(time=period)
+    )
+    snowline_s2_ds = find_snowline_from_snow_penalization(
+        xr.open_dataset(s2_snowline_path).sel(slope="8 - 30").sel(time=period)
+    )
     return snowline_openloop_edel_ds, snowline_viirs_ds, snowline_s2_ds
 
 
-def get_snowline_simulation(actual_xpid: str, period: slice = slice("2021-11", "2022-06")):
-    return (
+def get_snowline_simulation(actual_xpid: str, period: slice = slice(None, None)):
+    return find_snowline_from_snow_penalization(
         xr.open_dataset(edelweiss_analysis_snowline_file.replace("xpid_placeholder", actual_xpid))
         .sel(slope="8 - 30")
         .sel(time=period)
@@ -117,3 +139,37 @@ def get_station_location_data(
     viirs_station = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=viirs)
     s2_station = extract_bdclim_locations_on_s2(bdclim=bdclim, s2=s2)
     return sd_edel_station_openloop, viirs_station, s2_station
+
+
+def get_open_loop_station_scores(period: slice = slice("2021-11", "2022-06")) -> tuple[xr.Dataset, ...]:
+    sd_open_loop_station_scores = xr.open_dataset(f"{simulation_folder}/reanalysis/open_loop/scores/sd/bdclim/scores.nc").sel(
+        time=period
+    )
+    fsc_open_loop_station_scores = xr.open_dataset(
+        f"{simulation_folder}/reanalysis/open_loop/scores/fsc/bdclim/scores.nc"
+    ).sel(time=period)
+    return sd_open_loop_station_scores, fsc_open_loop_station_scores
+
+
+def get_analysis_station_scores(xpid: str, period: slice = slice("2021-11", "2022-06")) -> tuple[xr.Dataset, ...]:
+    sd_analysis_station_scores = xr.open_dataset(f"{simulation_folder}/reanalysis/{xpid}/scores/sd/bdclim/scores.nc").sel(
+        time=period
+    )
+    fsc_analysis_station_scores = xr.open_dataset(f"{simulation_folder}/reanalysis/{xpid}/scores/fsc/bdclim/scores.nc").sel(
+        time=period
+    )
+    return sd_analysis_station_scores, fsc_analysis_station_scores
+
+
+def read_bera_snowlines():
+    massif_data_arrays = []
+    for file in bera_snowline_files:
+        snowlines = pd.read_csv(file, delimiter="    ", header=None)
+        massif = file.split(".")[-2].split("_")[3]
+        dates = [datetime.strptime(str(date), "%Y%m%d") for date in snowlines[0]]
+        snowline_da = xr.DataArray(data=snowlines[[1, 2]].values, coords={"time": dates, "aspect": ["N", "S"]})
+        massif_data_arrays.append(snowline_da.expand_dims({"massif": [massif]}))
+
+    bera_snowlines = xr.concat(massif_data_arrays, dim="massif")
+    bera_snowlines = bera_snowlines.where(~(bera_snowlines < 0).any(dim="aspect"), drop=True)
+    return bera_snowlines

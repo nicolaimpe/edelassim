@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.stats
 import xarray as xr
 from geospatial_grid.gsgrid import GSGrid
 from pyproj import CRS
@@ -27,24 +28,36 @@ def compute_rmse(diff_array: np.ndarray | xr.DataArray) -> np.ndarray:
     return np.sqrt(np.nansum(squared_error) / n)
 
 
-import time
+def compute_crps_on_member_dimension_only(prediction: xr.DataArray, reference: xr.DataArray) -> float:
+    """CAREFUL USE THIS FUNCTION ONLY TO REDUCE ON MEMBER DIMENSION, PREDICTION IS A VECTOR WITH n_member elements and prediction is a scalar"""
+
+    def _compute_crps_snowtools(prediction, reference):
+        return EnsembleScores(timeObs=None, timeSim=None, obs=[reference], ensemble=np.array([prediction]).T).CRPS()
+
+    return xr.apply_ufunc(
+        _compute_crps_snowtools,
+        prediction,
+        reference,
+        input_core_dims=[["member"], []],
+        vectorize=True,
+    )
 
 
-def compute_scores(data: xr.Dataset) -> xr.Dataset:
-    eval = data.data_vars["eval"]
+def compute_ensemble_scores(data: xr.Dataset) -> xr.Dataset:
+
+    prediction = data.data_vars["prediction"]
     reference = data.data_vars["reference"]
-    maen_ensemble = eval.mean(dim="member")
-    crps = EnsembleScores(timeObs=None, timeSim=None, obs=reference.values, ensemble=eval.values).CRPS()
-    residuals_ensemble = eval - reference
-    mae_ensemble = np.abs(residuals_ensemble).mean(dim="member")
-    sigma_ensemble = np.sqrt((eval - maen_ensemble) ** 2).mean(dim="member").values[0]
-    difference_mean_member = (maen_ensemble - reference).values[0]
+    maen_ensemble = prediction.mean(dim="member")
+    crps = compute_crps_on_member_dimension_only(prediction=prediction, reference=reference)
+    residual_of_the_mean = prediction.mean(dim="member") - reference
+    aem_ensemble = np.abs(residual_of_the_mean)
+    sigma_ensemble = np.sqrt(((prediction - maen_ensemble) ** 2).mean(dim="member"))
     return xr.Dataset(
         {
             "crps": crps,
-            "mae": mae_ensemble,
+            "aem": aem_ensemble,
             "sigma": sigma_ensemble,
-            "diff_mean_member": difference_mean_member,
+            "residual_mean_member": prediction - reference,
         },
     )
 

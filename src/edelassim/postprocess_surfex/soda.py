@@ -23,34 +23,42 @@ def duplicated_particles_from_part_file(part_file: str) -> xr.DataArray:
     return part_da
 
 
-def alpha_from_file_python(alpha_file: str) -> xr.DataArray:
+def alpha_from_file(alpha_file: str) -> xr.DataArray:
     date_str = alpha_file[-14:-4]
     date = datetime.strptime(date_str, "%Y%m%d%H")
     alpha_df = pd.read_csv(alpha_file, header=None)
+    # If written by Python PF
+    if len(alpha_df.columns) == 1:
+        data = alpha_df.T.values
+        n_points = alpha_df.index
+    # If written by SODA
+    else:
+        data = np.expand_dims(alpha_df.values[0][:-1], axis=0)
+        n_points = alpha_df.columns[:-1]
     alpha_da = xr.DataArray(
-        data=alpha_df.T.values,
+        data=data,
         dims=(
             "time",
             "n_points",
         ),
-        coords={"time": [date], "n_points": alpha_df.index},
+        coords={"time": [date], "n_points": n_points},
     )
     return alpha_da
 
 
-def alpha_from_file_soda(alpha_file: str) -> xr.DataArray:
-    date_str = alpha_file[-14:-4]
-    date = datetime.strptime(date_str, "%Y%m%d%H")
-    alpha_df = pd.read_csv(alpha_file, header=None)
-    alpha_da = xr.DataArray(
-        data=np.expand_dims(alpha_df.values[0][:-1], axis=0),
-        dims=(
-            "time",
-            "n_points",
-        ),
-        coords={"time": [date], "n_points": alpha_df.columns[:-1]},
-    )
-    return alpha_da
+# def alpha_from_file_soda(alpha_file: str) -> xr.DataArray:
+#     date_str = alpha_file[-14:-4]
+#     date = datetime.strptime(date_str, "%Y%m%d%H")
+#     alpha_df = pd.read_csv(alpha_file, header=None)
+#     alpha_da = xr.DataArray(
+#         data=,
+#         dims=(
+#             "time",
+#             "n_points",
+#         ),
+#         coords={"time": [date], "n_points": alpha_df.columns[:-1]},
+#     )
+#     return alpha_da
 
 
 def concatenate_multiple_assimilation(file_list: list[str], read_function: callable) -> xr.DataArray:
@@ -66,7 +74,7 @@ def duplicated_particles_multiple_assimilation(part_files: list[str]) -> xr.Data
 
 
 def alpha_multiple_assimilation(alpha_files: list[str]) -> xr.DataArray:
-    return concatenate_multiple_assimilation(file_list=alpha_files, read_function=alpha_from_file_python)
+    return concatenate_multiple_assimilation(file_list=alpha_files, read_function=alpha_from_file)
 
 
 def duplicated_particles_to_grid(duplicated_particles_da: xr.DataArray, grid: GSGrid) -> xr.DataArray:
