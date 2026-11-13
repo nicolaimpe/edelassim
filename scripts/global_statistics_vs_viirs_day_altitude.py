@@ -1,64 +1,15 @@
-from datetime import timedelta
-
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from matplotlib import cm, colors
-from matplotlib.axes import Axes
 
-from edelassim.snowlines import find_snowline_from_snow_penalization
-from edelassim.visualization.day_site import RdGn_colormap
+from edelassim.visualization.day_site import alt_time_diagramm_plot
 from edelassim.visualization.static_files import (
-    COLORS,
-    LABELS,
     get_snowline_simulation,
     get_snowlines,
     list_satellite_clear_dates,
     read_bera_snowlines,
     simulation_folder,
 )
-
-
-def alt_time_diagramm_plot(score_data: xr.Dataset, ax: Axes):
-    colormap = RdGn_colormap()
-    norm = matplotlib.colors.Normalize(vmin=-0.5, vmax=0.5)
-
-    day_of_season = (score_data.time - score_data.time[0]).dt.days
-    for i in range(score_data.sizes["elevation_min"]):
-        barplot_colors = colormap(norm(score_data.data_vars["diff_aem"].isel(elevation_min=i)))
-        ax.barh(
-            y=i,
-            width=timedelta(days=1).days,
-            height=1,
-            left=day_of_season,
-            facecolor=barplot_colors,
-            edgecolor="black",
-            linewidth=0.1,
-        )
-        ax.barh(
-            y=i,
-            width=timedelta(days=1).days,
-            height=1,
-            left=day_of_season.where(np.isnan(score_data.data_vars["diff_aem"]).isel(elevation_min=i)),
-            facecolor="gray",
-            edgecolor="black",
-            linewidth=0.1,
-        )
-
-    first_of_month = day_of_season.sel(time=day_of_season.coords["time"].dt.day == 1)
-    ax.set_xticks(first_of_month.values)
-    ax.set_xticklabels(first_of_month.time.dt.strftime("%d-%B").values)
-    ax.set_yticks(np.arange(score_data.sizes["elevation_min"]))
-    ax.set_yticklabels(
-        [
-            f"{((el_max + el_min) / 2):.0f} m"
-            for el_min, el_max in zip(score_data.coords["elevation_min"].values, score_data.coords["elevation_max"].values)
-        ]
-    )
-    sm = cm.ScalarMappable(cmap=colormap, norm=norm)
-    # ax.get_figure().colorbar(sm, ax=ax)
-    ax.get_figure().colorbar(sm, ax=ax).set_label("AEM open loop - AEM assimilation")
 
 
 def find_snowline_index(score_dataset: xr.Dataset, snowlines: xr.DataArray):

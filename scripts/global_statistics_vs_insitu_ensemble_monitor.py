@@ -9,8 +9,8 @@ from edelassim.filter import effective_sample_size_xarray
 from edelassim.grids import EdelweissGrandesRoussesGrid
 from edelassim.postprocess_surfex.soda import alpha_multiple_assimilation, alpha_to_grid, duplicated_particles_to_grid
 from edelassim.visualization.static_files import (
-    bdclim_filepath,
     get_analysis_station_scores,
+    get_bdclim,
     get_duplicated_particles_assim_dates,
     get_open_loop_station_scores,
     working_folder,
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     plot_colors = ["magenta", "darkgreen"]
     plot_labels = ["sigma const", "sigma var"]
     period = slice("2021-11", "2022-06")
-    bdclim = xr.open_dataset(bdclim_filepath).sel(time=period)
+    bdclim = get_bdclim(period=period)
 
     fig = plt.figure(figsize=(16, 7))
     fig.suptitle(f"Edelweiss vs in situ ({bdclim.sizes['num_poste']} locations aggregated) ")
@@ -34,6 +34,7 @@ if __name__ == "__main__":
     ax_scores_fsc.set_title(f"FSC {score_name.upper()}S")
 
     sd_ol_scores, fsc_ol_scores = get_open_loop_station_scores(period=period)
+    # print(sd_ol_scores.data_vars[score_name])
     mean_sd_ol_score = sd_ol_scores.data_vars[score_name].sel(num_poste=bdclim.coords["num_poste"]).mean(dim="num_poste")
     mean_fsc_ol_score = fsc_ol_scores.data_vars[score_name].sel(num_poste=bdclim.coords["num_poste"]).mean(dim="num_poste")
     for idx, xpid in enumerate(xpids):
@@ -83,7 +84,7 @@ if __name__ == "__main__":
         # Compute approximate sample size from duplicated particles
         for mb in duplicated_particles.coords["member"]:
             n = (duplicated_particles_station == mb + 1).sum(dim=("member"))
-            particle_occurrence[dict(member=mb)] = n
+            particle_occurrence[{"member": mb}] = n
         # Normalized Effective sample size mean
         n_members = particle_occurrence.sizes["member"]
         eff_sample_size = effective_sample_size_xarray(weights=(particle_occurrence / n_members))

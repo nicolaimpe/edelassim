@@ -8,12 +8,10 @@ from edelassim.visualization.static_files import (
     COLORS,
     LABELS,
     get_data_assimilation_simulation,
-    get_duplicated_particles_assim_dates,
     get_spatial_datasets,
     get_station_location_data,
     list_satellite_clear_dates,
 )
-from edelassim.visualization.time_series import add_assim_dates
 
 if __name__ == "__main__":
     ### Inputs and preprocessing

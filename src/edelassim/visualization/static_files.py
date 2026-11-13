@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from glob import glob
 
 import pandas as pd
@@ -166,7 +166,7 @@ def read_bera_snowlines():
     for file in bera_snowline_files:
         snowlines = pd.read_csv(file, delimiter="    ", header=None)
         massif = file.split(".")[-2].split("_")[3]
-        dates = [datetime.strptime(str(date), "%Y%m%d") for date in snowlines[0]]
+        dates = [datetime.strptime(str(date), "%Y%m%d") + timedelta(hours=12) for date in snowlines[0]]
         snowline_da = xr.DataArray(data=snowlines[[1, 2]].values, coords={"time": dates, "aspect": ["N", "S"]})
         massif_data_arrays.append(snowline_da.expand_dims({"massif": [massif]}))
 
