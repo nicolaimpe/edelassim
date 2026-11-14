@@ -5,17 +5,14 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from geospatial_grid.georeferencing import georef_netcdf_rioxarray
 from matplotlib.gridspec import GridSpec
 from matplotlib.widgets import Button
-from pyproj import CRS, Proj, Transformer, transform
-from sklearn.metrics import mean_squared_error
+from pyproj import Transformer
 
 from edelassim.bdclim import find_station_imshow_location, find_station_locations
 from edelassim.evaluations import compute_rmse
 from edelassim.observation_operators import dickinson
-from edelassim.observations import valid_snow_cover_fraction_s2, valid_snow_cover_fraction_viirs_mf
-from edelassim.snowlines import find_forcing_snowrain_line, find_snowline_from_snow_penalization
+from edelassim.snowlines import find_forcing_snowrain_line
 from edelassim.visualization.interactive_plots import InteractiveSeasonExploreButtons
 from edelassim.visualization.polar import plot_polar_envelop_member, plot_snowline_polarplot, set_polarplot
 from edelassim.visualization.spatial import (
@@ -26,7 +23,18 @@ from edelassim.visualization.spatial import (
     SNOW_DEPTH_CMAP,
     add_2d_plot,
 )
-from edelassim.visualization.static_files import COLORS, LABELS, good_dates_s2, good_dates_viirs
+from edelassim.visualization.static_files import (
+    COLORS,
+    LABELS,
+    forcing_folder,
+    get_data_assimilation_simulation,
+    get_snowline_simulation,
+    get_snowlines,
+    get_spatial_datasets,
+    list_satellite_clear_dates,
+    mask,
+    topography_data_folder,
+)
 from edelassim.visualization.time_series import plot_ensemble_time_series
 
 
@@ -205,13 +213,13 @@ def update_snowline_plots():
     plot_kwargs = {"ax": ax_snowlines}
 
     # Snowline
-    current_edel_ol_sl = find_snowline_from_snow_penalization(snowline_ol_edel_ds.sel(time=current_date))
+    current_edel_ol_sl = snowline_ol_edel_ds.sel(time=current_date)
     plot_polar_envelop_member(current_edel_ol_sl, current_member, COLORS["edel_ol"], LABELS["edel_ol"], **plot_kwargs)
 
-    current_edel_an_sl = find_snowline_from_snow_penalization(snowline_an_edel_ds.sel(time=current_date))
+    current_edel_an_sl = snowline_an_edel_ds.sel(time=current_date)
     plot_polar_envelop_member(current_edel_an_sl, current_member, COLORS["edel_an"], LABELS["edel_an"], **plot_kwargs)
 
-    snowline_viirs = find_snowline_from_snow_penalization(snowline_viirs_ds.sel(time=current_date))
+    snowline_viirs = snowline_viirs_ds.sel(time=current_date)
     plot_snowline_polarplot(snowline_viirs, label=LABELS["viirs"], color=COLORS["viirs"], **plot_kwargs)
 
     diff_snowline_viirs = current_edel_ol_sl.sel(member=current_member) - snowline_viirs
@@ -221,7 +229,7 @@ def update_snowline_plots():
     fig_snowlines.text(x=0.1, y=0.92, s=f"RMSE assim - VIIRS: {compute_rmse(diff_snowline_viirs):.1f}")
 
     if np.datetime64(current_date) in snowline_s2_ds.coords["time"]:
-        snowline_s2 = find_snowline_from_snow_penalization(snowline_s2_ds.sel(time=current_date))
+        snowline_s2 = snowline_s2_ds.sel(time=current_date)
         plot_snowline_polarplot(snowline_s2, label=LABELS["s2"], color=COLORS["s2"], **plot_kwargs)
 
         diff_snowline_s2 = current_edel_ol_sl.sel(member=current_member) - snowline_s2
@@ -265,11 +273,10 @@ def update_station_plot():
 
     period = slice(current_date, current_date + current_period_length)
     # BDclim
-    sd_time_station = (
-        bdclim.sel(time=period).where(bdclim["x"] == x_station, drop=True).where(bdclim["y"] == y_station, drop=True)
-    )
-    station_name = sd_time_station.coords["Station_Name"].values[0]
-    altitude = sd_time_station.coords["ZS"].values[0]
+
+    sd_time_station = bdclim.sel(time=period).isel(num_poste=current_station_idx)
+    station_name = sd_time_station.coords["station_name"].values
+    altitude = sd_time_station.coords["elevation"].values
     t_coord_bdclim = sd_time_station.coords["time"]
 
     ax_station_time_sd.plot(
@@ -328,16 +335,16 @@ def update_station_plot():
     ax_station_time_fsc.grid(True)
 
     # Pleaides
-    sd_pleiades_station = pleiades.sel(time=period).sel(x=x_station, y=y_station, method="nearest")
-    ax_station_time_sd.plot(
-        sd_pleiades_station.time,
-        sd_pleiades_station.values,
-        marker="*",
-        linewidth=0,
-        markersize=15,
-        color="gold",
-        label="Pleiades",
-    )
+    # sd_pleiades_station = pleiades.sel(time=period).sel(x=x_station, y=y_station, method="nearest")
+    # ax_station_time_sd.plot(
+    #     sd_pleiades_station.time,
+    #     sd_pleiades_station.values,
+    #     marker="*",
+    #     linewidth=0,
+    #     markersize=15,
+    #     color="gold",
+    #     label="Pleiades",
+    # )
 
     # Sentinel-2
     trans = Transformer.from_crs(2154, 32631)
@@ -346,7 +353,7 @@ def update_station_plot():
         snow_cover_s2.sel(time=good_dates_s2).sel(time=period).sel(x=x_station_s2, y=y_station_s2, method="nearest")
     )
     ax_station_time_fsc.plot(
-        snow_cover_s2_station.time + np.timedelta64(10, "h") + np.timedelta64(30, "m"),  # Sentinel-2 10:30 am pass
+        snow_cover_s2_station.time,  # Sentinel-2 10:30 am pass
         snow_cover_s2_station,
         marker="s",
         mfc="none",
@@ -361,7 +368,7 @@ def update_station_plot():
         snow_cover_viirs.sel(time=good_dates_viirs).sel(time=period).sel(x=x_station, y=y_station, method="nearest")
     )
     ax_station_time_fsc.plot(
-        snow_cover_viirs_station.time + np.timedelta64(12, "h"),  # Observation assimilated at 12h
+        snow_cover_viirs_station.time,  # Observation assimilated at 12h
         snow_cover_viirs_station,
         marker="o",
         linewidth=0,
@@ -404,31 +411,19 @@ logger = logging.getLogger("logger")
 logging.basicConfig(level=logging.INFO)
 if __name__ == "__main__":
     ################################ User inputs #############################################
-    xpid = "assim_viirs_cloudcover055_wy2122_soda_dev"
-    working_folder = "/home/imperatoren/work/edelweiss_assimilation/"
-    observation_folder = f"{working_folder}/observations/grandesrousses250m"
-    simulation_folder = f"{working_folder}/simulations/postprocess"
-    s2_folder = f"{observation_folder}/s2"
-    edelweiss_ol_folder = f"{simulation_folder}/grandesrousses250m/open_loop/"
-    edelweiss_an_folder = f"{simulation_folder}/reanalysis/{xpid}/"
-    viirs_folder = f"{observation_folder}/meteofrance/"
-    forcing_ol_folder = f"{working_folder}/forcing/grandesrousses250m/open_loop"
-    forcing_analysis_folder = f"{working_folder}/forcing/postprocess/reanalysis/{xpid}/"
-    bdclim_filepath = f"{working_folder}/observations/grandesrousses250m/bdclim/snow_depth_daily_avg.nc"
-    pleiades_path = f"{observation_folder}/pleiades_grandesrousses_all.nc"
-
-    topography_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/topography/"
-    landcover_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/"
-    forest_mask_path = f"{landcover_folder}/forest_mask/forest_mask_corine_grandesrousses_max.nc"
-    glacier_mask_path = f"{landcover_folder}/glacier_mask/glacier_mask_glims_2022_grandesrousses.nc"
-    dem_250m_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
-    dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
-
+    xpid = "assim_viirs_cloudcover055_wy2122_sigma_obs_var"
+    period = slice("2021-11", "2022-07")
     # Initial date
     current_date = datetime(2021, 11, 1, hour=12)
     period_length = timedelta(days=30)
     date_end = current_date + period_length
+    forcing_ol_folder = f"{forcing_folder}/grandesrousses250m/open_loop"
+    forcing_analysis_folder = f"{forcing_folder}/postprocess/reanalysis/{xpid}/"
 
+    dem_250m_filepath = f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif"
+    dem_20m_filepath = f"{topography_data_folder}/20m/DEM_GR_UTM_20m.tif"
+
+    ################ Prepare buttons ##################################
     fig_buttons = plt.figure(figsize=(8, 2))
     buttons = InteractiveSeasonExploreButtons(fig=fig_buttons)
     buttons.btn_d_minus.on_clicked(lambda e: change_day(-1))
@@ -451,30 +446,17 @@ if __name__ == "__main__":
     ########################### Read data ##########################################################
 
     logger.info("Reading data")
-    glacier_mask = xr.open_dataset(glacier_mask_path).data_vars["__xarray_dataarray_variable__"]
-    forest_mask = xr.open_dataset(forest_mask_path).sel(band=1).data_vars["__xarray_dataarray_variable__"]
-    mask = glacier_mask + forest_mask
-    mask = georef_netcdf_rioxarray(mask, crs=CRS.from_epsg(2154))
-    snow_cover_s2 = xr.open_dataset(f"{s2_folder}/spatial.nc").data_vars["snow_cover_fraction"]
-    mask_20m = mask.rio.reproject_match(snow_cover_s2)
-    snow_cover_s2 = valid_snow_cover_fraction_s2(snow_cover_s2.where(1 - mask_20m))
+    good_dates_viirs, good_dates_s2 = list_satellite_clear_dates(period=period)
+    snow_depth_edel_ol_ds, snow_cover_viirs, snow_cover_s2, pleiades, bdclim = get_spatial_datasets(period=period)
+    snow_depth_edel_ol_ds = snow_depth_edel_ol_ds.data_vars["DSN_T_ISBA"]
+    snow_cover_viirs = snow_cover_viirs.data_vars["snow_cover_fraction"]
+    snow_cover_s2 = snow_cover_s2.data_vars["snow_cover_fraction"]
+    snow_depth_edel_an_ds = get_data_assimilation_simulation(xpid, period=period).data_vars["DSN_T_ISBA"]
+    snowline_ol_edel_ds, snowline_viirs_ds, snowline_s2_ds = get_snowlines(period=period)
+    snowline_an_edel_ds = get_snowline_simulation(xpid, period=period)
 
     dem_250m = xr.open_dataarray(dem_250m_filepath).sel(band=1)
     dem_20m = xr.open_dataarray(dem_20m_filepath).sel(band=1)
-
-    snow_cover_viirs = valid_snow_cover_fraction_viirs_mf(
-        xr.open_dataset(f"{viirs_folder}/spatial.nc").data_vars["snow_cover_fraction"].where(1 - mask)
-    )
-
-    snow_depth_edel_ol_ds = xr.open_dataset(f"{edelweiss_ol_folder}/spatial.nc")
-    snow_depth_edel_ol_ds = snow_depth_edel_ol_ds.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
-    snow_depth_edel_an_ds = xr.open_dataset(f"{edelweiss_an_folder}/spatial.nc")
-    snow_depth_edel_an_ds = snow_depth_edel_an_ds.data_vars["DSN_T_ISBA"].sortby("y", ascending=False).where(1 - mask)
-
-    snowline_s2_ds = xr.open_dataset(f"{s2_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
-    snowline_ol_edel_ds = xr.open_dataset(f"{edelweiss_ol_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
-    snowline_an_edel_ds = xr.open_dataset(f"{edelweiss_an_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
-    snowline_viirs_ds = xr.open_dataset(f"{viirs_folder}/snowline_parametrization.nc").sel(slope="8 - 30")
 
     forcing_ol = xr.open_mfdataset(f"{forcing_ol_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
     forcing_an = xr.open_mfdataset(f"{forcing_analysis_folder}/spatial.nc").sortby("y", ascending=False).where(1 - mask)
@@ -484,16 +466,7 @@ if __name__ == "__main__":
         slope_bins="8 - 30"
     )
 
-    # Independent observations
-    start_time, end_time = snow_depth_edel_ol_ds.coords["time"][0], snow_depth_edel_ol_ds.coords["time"][-1]
-    bdclim = xr.open_dataarray(bdclim_filepath).sel(time=slice(start_time, end_time))
     x_poste, y_poste = find_station_locations(bdclim_dataset=bdclim)
-    pleiades = (xr.open_dataset(pleiades_path).where(1 - mask).sel(time=slice(start_time, end_time))).data_vars["snow_depth"]
-
-    # values for observation operator values
-    # b_values = snowline_ol_edel_ds.coords["b"].values  # or from your DataArray
-    # Initial value for observation operator parametrization
-    # current_b = b_values[0]
 
     # Values for member values
     member_values = snowline_ol_edel_ds.coords["member"].values  # or from your DataArray

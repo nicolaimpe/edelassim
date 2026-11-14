@@ -6,14 +6,12 @@ import pandas as pd
 import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.gridspec import GridSpec
-from xarray.groupers import BinGrouper, UniqueGrouper
+from xarray.groupers import BinGrouper
 
-from edelassim.bdclim import extract_bdclim_locations_on_spatial_dataset
 from edelassim.evaluations import compute_rmse
 from edelassim.visualization.scatter import plot_data_assimilation_base_simulation, plot_ensemble_simulation
 from edelassim.visualization.static_files import (
     COLORS,
-    LABELS,
     get_data_assimilation_simulation,
     get_spatial_datasets,
     topography_data_folder,
@@ -34,30 +32,16 @@ def compute_snow_depth_stats(spatial_data: xr.DataArray, dem: xr.DataArray, alti
     return grouped_dataset.groupby(elevation=altitude_bins).map(make_stats_snow_depth)
 
 
-def plot_snow_depth_boxplot(spatial_data: xr.DataArray, ax: Axes, offset: float):
-    ax.boxplot(spatial_data.snow_depth.values.flatten(), 2, orientation="horizontal")
-    return xr.DataArray(0)
-
-
-def plot_var_boxplot_array(data: xr.Dataset, ax: Axes, var: str, offset: float, width: float = 0.4, color: str = "blue"):
-    # print(data.data_vars["open_loop"])
-    open_loop_residuals = data.data_vars["snow_depth"].values.flatten()
-    # width = 0.4
-    # print(width)
-    # print(len(data[var]))
-    bp = ax.boxplot(
-        [open_loop_residuals[~np.isnan(open_loop_residuals)]],
-        positions=[data[var].mean() - width / 2 + offset],
-        showfliers=False,
-        notch=True,
-        patch_artist=True,
-        widths=width,
-        orientation="horizontal",
-        label=[LABELS["edel_ol"]],
-    )
-    bp["boxes"][0].set_facecolor(color)
-    # bp["boxes"][1].set_facecolor(COLORS["edel_an"])
-    return data
+def plot_violinplot(data: xr.DataArray, position: float, ax: Axes, color: str):
+    data = data.data.flatten()
+    data = data[~np.isnan(data)]
+    parts = ax.violinplot(data, positions=[position], widths=[0.8], showmeans=True, showextrema=False)
+    for pc in parts["bodies"]:
+        pc.set_edgecolor(color)
+        pc.set_facecolor(color)
+        pc.set_alpha(0.3)
+    parts["cmeans"].set_color(color)
+    # parts["cbars"].set_color(color)
 
 
 if __name__ == "__main__":
@@ -68,25 +52,37 @@ if __name__ == "__main__":
     alt_step = 100
 
     edelweiss_openloop, viirs, s2, pleiades, bdclim = get_spatial_datasets(period=period)
-    edelweiss_openloop = edelweiss_openloop.sel(member=slice(0, None)).data_vars["DSN_T_ISBA"]
     pleiades = pleiades.sel(band=1).data_vars["snow_depth"]
+    pleiades = pleiades.where(pleiades >= 0)
+    edelweiss_openloop = (
+        edelweiss_openloop.data_vars["DSN_T_ISBA"]
+        .sel(member=slice(0, None))
+        .sel(time=pleiades.coords["time"])
+        .where(pleiades >= 0)
+    )
+    edelweiss_assim_list = [get_data_assimilation_simulation(xpid, period=period) for xpid in xpids]
+    edelweiss_assim_list = [
+        simulation.data_vars["DSN_T_ISBA"].sel(member=slice(0, None)).sel(time=pleiades.coords["time"]).where(pleiades >= 0)
+        for simulation in edelweiss_assim_list
+    ]
+
     dem = xr.open_dataarray(f"{topography_data_folder}/250m/DEM_GR_L93_250m.tif").sel(band=1)
-    # sd_edel_station_openloop = extract_bdclim_locations_on_spatial_dataset(bdclim, spatial_dataset=edelweiss_openloop)
 
     ### Snow depth vs altitude scatter
     # Pleiades
 
-    grid_spec = GridSpec(nrows=2, ncols=2, hspace=0.25, height_ratios=(1, 0.33), width_ratios=(1, 0.15))
+    grid_spec = GridSpec(nrows=2, ncols=2, hspace=0.25, height_ratios=(1, 0.5), width_ratios=(1, 0.25))
     n_bars = len(xpids) + 2
     bar_width = (alt_step - alt_step / 4) / n_bars
     bars_offest = n_bars // 2 * bar_width + bar_width / 2
 
-    for pleiades_date in pleiades.coords["time"][1:]:
+    for pleiades_date in pleiades.coords["time"]:
         fig = plt.figure()
+        fig.suptitle(f"Edelweiss vs Pleiades - {pd.Timestamp(pleiades_date.values).strftime('%d-%b-%Y')}")
         ax = fig.add_subplot(grid_spec[0])
 
         stats_ol = compute_snow_depth_stats(
-            spatial_data=edelweiss_openloop.sel(time=pleiades_date).where(pleiades.sel(time=pleiades_date) >= 0),
+            spatial_data=edelweiss_openloop.sel(time=pleiades_date),
             dem=dem,
             altitude_step=alt_step,
         )
@@ -137,26 +133,14 @@ if __name__ == "__main__":
             ),
         )
 
-        ax_boxplots = fig.add_subplot(grid_spec[1])
-        snow_depth_bins = BinGrouper(np.arange(0, 3.1, 0.25), labels=np.arange(0, 3, 0.25))
-        xr.Dataset({"snow_depth": pleiades.sel(time=pleiades_date)}).groupby(snow_depth=snow_depth_bins).map(
-            plot_var_boxplot_array, ax=ax_boxplots, var="snow_depth", offset=0, width=0.1, color="black"
-        )
-        xr.Dataset(
-            {
-                "snow_depth": edelweiss_openloop.where(pleiades.sel(time=pleiades_date) >= 0)
-                .sel(time=pleiades_date)
-                .mean(dim="member")
-            }
-        ).groupby(snow_depth=snow_depth_bins).map(
-            plot_var_boxplot_array, ax=ax_boxplots, var="snow_depth", offset=0.1, width=0.1, color=COLORS["edel_ol"]
-        )
+        ax_violinplots = fig.add_subplot(grid_spec[1])
+        plot_violinplot(data=pleiades, position=0, ax=ax_violinplots, color="black")
+        plot_violinplot(data=edelweiss_openloop.mean(dim="member"), position=1, ax=ax_violinplots, color=COLORS["edel_ol"])
+
         for idx, xpid in enumerate(xpids):
-            edelweiss_assimilation = (
-                get_data_assimilation_simulation(xpid, period=period).sel(member=slice(0, None)).data_vars["DSN_T_ISBA"]
-            )
+            edelweiss_assimilation = edelweiss_assim_list[idx]
             stats_assim = compute_snow_depth_stats(
-                spatial_data=edelweiss_assimilation.sel(time=pleiades_date).where(pleiades.sel(time=pleiades_date) >= 0),
+                spatial_data=edelweiss_assimilation.sel(time=pleiades_date),
                 dem=dem,
                 altitude_step=alt_step,
             )
@@ -185,33 +169,29 @@ if __name__ == "__main__":
                     - stats_assim.data_vars["volume"].mean(dim="member").sum(dim="elevation_bins")
                 ),
             )
-            xr.Dataset(
-                {
-                    "snow_depth": edelweiss_openloop.where(pleiades.sel(time=pleiades_date) >= 0)
-                    .sel(time=pleiades_date)
-                    .mean(dim="member")
-                }
-            ).groupby(snow_depth=snow_depth_bins).map(
-                plot_var_boxplot_array,
-                ax=ax_boxplots,
-                var="snow_depth",
-                offset=0.1 + 0.1 * (2 + idx),
-                width=0.1,
-                color=plot_colors[idx],
+            plot_violinplot(
+                data=edelweiss_assimilation.mean(dim="member"), position=2 + idx, ax=ax_violinplots, color=plot_colors[idx]
             )
 
-        ax.set_title(f"Edelweiss vs Pleiades - {pd.Timestamp(pleiades_date.values).strftime('%d-%b-%Y')}- {alt_step} m bins")
+        ax.set_title(f"Mean snow depth per elevation band - {alt_step} m band")
         ax.set_ylabel("Mean snow depth [m]")
         ax.set_xlabel("Elevation [m]")
         ax.grid()
         ax.legend()
 
         ax_volume.grid()
+        ax_volume.set_title(f"Snow volume per elevation band - {alt_step} m band")
         ax_volume.set_ylabel("Snow volume [m³]")
-        ax.set_xlabel("Elevation [m]")
+        ax_volume.set_xlabel("Elevation [m]")
 
         ax_total.set_title("Total snow volume")
         ax_total.set_ylabel("Snow volume [m³]")
         ax_total.set_xticks([])
+
+        ax_violinplots.set_title("Snow depth distribution (mean member)")
+        ax_violinplots.set_ylabel("Snow depth")
+        ax_violinplots.set_xticks([])
+        ax_violinplots.set_ylim(0, 3.5)
+        ax_violinplots.grid()
 
     plt.show()

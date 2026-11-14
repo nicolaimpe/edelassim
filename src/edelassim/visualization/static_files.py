@@ -31,6 +31,7 @@ simulation_folder = f"{working_folder}/simulations/postprocess"
 edelweiss_openloop_folder = f"{simulation_folder}/reanalysis/open_loop/"
 edelweiss_analysis_folder = f"{simulation_folder}/reanalysis/{xpid}"
 observation_folder = f"{working_folder}/observations/grandesrousses250m/"
+forcing_folder = f"{working_folder}/forcing/"
 topography_data_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/topography/"
 landcover_folder = f"{working_folder}/data/grandesrousses250m/auxiliary/"
 forest_mask_path = f"{landcover_folder}/forest_mask/forest_mask_corine_grandesrousses_max.nc"
@@ -93,7 +94,7 @@ def get_viirs(period: slice = slice("2021-11", "2022-06")) -> xr.Dataset:
 
 
 def get_spatial_datasets(period: slice = slice("2021-11", "2022-06")) -> tuple[xr.Dataset, ...]:
-    edelweiss_ol = xr.open_dataset(edelweiss_openloop_file).where(1 - mask).sel(time=period)
+    edelweiss_ol = xr.open_dataset(edelweiss_openloop_file).where(1 - mask).sel(time=period).sortby("y", ascending=False)
     viirs = get_viirs(period=period)
     s2 = xr.open_dataset(s2_path)
     s2 = valid_snow_cover_fraction_s2(s2.where(1 - mask_20m)).sel(time=period)
@@ -103,7 +104,12 @@ def get_spatial_datasets(period: slice = slice("2021-11", "2022-06")) -> tuple[x
 
 
 def get_data_assimilation_simulation(actual_xpid: str, period: slice = slice(None, None)):
-    return xr.open_dataset(edelweiss_analysis_file.replace("xpid_placeholder", actual_xpid)).where(1 - mask).sel(time=period)
+    return (
+        xr.open_dataset(edelweiss_analysis_file.replace("xpid_placeholder", actual_xpid))
+        .where(1 - mask)
+        .sel(time=period)
+        .sortby("y", ascending=False)
+    )
 
 
 def get_data_assimilation_snowline(actual_xpid: str, period: slice = slice("2021-11", "2022-06")):
